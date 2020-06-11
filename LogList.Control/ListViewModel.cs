@@ -14,7 +14,7 @@ namespace LogList.Control
             var sortedOriginals =
                 Collection.ToObservableChangeSet(x => x.Id)
                           .Sort(SortExpressionComparer<ILogItem>.Ascending(x => x.Time),
-                                SortOptimisations.ComparesImmutableValuesOnly | SortOptimisations.IgnoreEvaluates);
+                                SortOptimisations.ComparesImmutableValuesOnly);
 
             Heights = new HeightViewModel(sortedOriginals);
 

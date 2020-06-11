@@ -1,14 +1,19 @@
 using System;
-using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
 using System.Reactive.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using DynamicData;
+using DynamicData.Binding;
+using ReactiveUI;
 
 namespace LogList.Control
 {
     public partial class LogListBox : UserControl
     {
+        private ReadOnlyObservableCollection<ContentPresenter> _items;
+
         public LogListBox()
         {
             InitializeComponent();
@@ -18,52 +23,47 @@ namespace LogList.Control
         {
             if (Data == null)
                 return;
-            
-            DataContext = Data;
-            _dataViewModel = Data;
+
+            DataContext                           = Data;
+            _dataViewModel                        = Data;
             _dataViewModel.Heights.ViewportHeight = HostCanvas.ActualHeight;
 
             Data.VisibleItems
+                .RemoveKey()
+                .Sort(SortExpressionComparer<ILogItem>.Ascending(x => x.Time), SortOptions.UseBinarySearch)
                 .ObserveOnDispatcher()
-                .Flatten()
-                .Subscribe(ProcessChange);
+                .Transform(GetItemPresenter)
+                .OnItemAdded(i => HostCanvas.Children.Add(i))
+                .OnItemRemoved(i => HostCanvas.Children.Remove(i))
+                .Bind(out _items)
+                .Do(_ => RefreshPositions())
+                .Subscribe();
+
+            _dataViewModel.Heights.WhenAnyValue(x => x.ListOffset)
+                          .Subscribe(_ => RefreshPositions());
         }
 
-        private void ProcessChange<TContent>(Change<TContent, int> Change)
+        private void RefreshPositions()
         {
-            switch (Change.Reason)
+            // var line = string.Join(" ", _items.Select(p => ((ILogItem) p.Content).Id));
+            // Console.WriteLine(line);
+            
+            for (var i = 0; i < _items.Count; i++)
             {
-                case ChangeReason.Add:
-                    AddItem(Change.Current, Change.Key, Change.CurrentIndex);
-                    break;
-
-                case ChangeReason.Remove:
-                    RemoveItem(Change.Key);
-                    break;
-                
-                default:
-                    break;
+                var offset = _dataViewModel.Heights.RelativeOffsetFromIndex(i);
+                _items[i].SetValue(Canvas.TopProperty, offset);
             }
         }
 
-        private void RemoveItem(int Key)
+        private ContentPresenter GetItemPresenter(ILogItem ItemData)
         {
-            var presenter = _items[Key];
-            HostCanvas.Children.Remove(presenter);
-            _items.Remove(Key);
-        }
-
-        private void AddItem<TContent>(TContent ItemData, int Key, int Index)
-        {
-            var presenter = new ContentPresenter { Content = ItemData, Height = _dataViewModel.Heights.ItemHeight, Width = Width };
-            presenter.SetValue(Canvas.TopProperty, OffsetFromIndex(Index));
-            _items.Add(Key, presenter);
-            HostCanvas.Children.Add(presenter);
-        }
-
-        private double OffsetFromIndex(int Index)
-        {
-            return _dataViewModel.Heights.OffsetFromIndex(Index);
+            var presenter = new ContentPresenter
+            {
+                Content = ItemData,
+                Height  = _dataViewModel.Heights.ItemHeight,
+                Width   = Width
+            };
+            return presenter;
         }
 
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
@@ -74,8 +74,6 @@ namespace LogList.Control
         }
 
         #region Properties
-
-        private readonly Dictionary<int, ContentPresenter> _items = new Dictionary<int, ContentPresenter>();
 
         public static readonly DependencyProperty ItemsSourceProperty = DependencyProperty.Register(
             "ItemsSource", typeof(IListDataViewModel), typeof(LogListBox),
@@ -96,7 +94,7 @@ namespace LogList.Control
             get => (IListDataViewModel) GetValue(ItemsSourceProperty);
             set => SetValue(ItemsSourceProperty, value);
         }
-        
+
         #endregion
     }
 }

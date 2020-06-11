@@ -17,6 +17,7 @@ namespace LogList.Control
 
         private double _listOffset;
         private double _viewportHeight;
+        private VirtualRequest _lastRequest;
 
         public HeightViewModel(IObservable<ISortedChangeSet<ILogItem, int>> Items, double ItemHeight = 25)
         {
@@ -30,7 +31,8 @@ namespace LogList.Control
             PagingRequests = this.WhenAnyValue(x => x.ListOffset,
                                                x => x.ViewportHeight,
                                                (offset, height) => new { offset, height })
-                                 .Select(x => new VirtualRequest(IndexFromOffset(x.offset), Count(x.offset, x.height)));
+                                 .Select(x => new VirtualRequest(IndexFromOffset(x.offset), Count(x.offset, x.height)))
+                                 .Do(rq => _lastRequest = rq);
 
             this.WhenAnyValue(x => x.ListHeight,
                               x => x.ViewportHeight,
@@ -63,9 +65,9 @@ namespace LogList.Control
             _cleanup.Dispose();
         }
 
-        private int Count(double StartingFrom, double Height)
+        private int Count(double StartingFrom, double AreaHeight)
         {
-            return (int) Math.Ceiling(Height / ItemHeight);
+            return (int) Math.Ceiling(AreaHeight / ItemHeight) + 1;
         }
 
         public int IndexFromOffset(double Offset)
@@ -76,6 +78,11 @@ namespace LogList.Control
         public double OffsetFromIndex(double Index)
         {
             return ItemHeight * Index;
+        }
+
+        public double RelativeOffsetFromIndex(in int IndexOnPage)
+        {
+            return OffsetFromIndex(IndexOnPage + _lastRequest?.StartIndex ?? 0) - ListOffset;
         }
     }
 }
