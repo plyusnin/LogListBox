@@ -1,18 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
 
     <PropertyGroup>
-        <OutputType>WinExe</OutputType>
         <TargetFramework>netcoreapp3.1</TargetFramework>
         <UseWPF>true</UseWPF>
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\LogList.Control\LogList.Control.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
+      <PackageReference Include="DynamicData" Version="6.15.1" />
       <PackageReference Include="ReactiveUI" Version="11.4.17" />
-      <PackageReference Include="ReactiveUI.WPF" Version="11.4.17" />
     </ItemGroup>
 
 </Project>
