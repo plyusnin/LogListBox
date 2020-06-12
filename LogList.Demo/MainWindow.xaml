@@ -8,16 +8,14 @@
         xmlns:viewModels="clr-namespace:LogList.Demo.ViewModels"
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800" d:DataContext="{d:DesignInstance viewModels:MainViewModel}">
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="Auto" />
-        </Grid.ColumnDefinitions>
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Bottom" Margin="2" Orientation="Horizontal">
+            <TextBlock Margin="2" Text="Filter:" />
+            <TextBox Margin="2" Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}"
+                     Padding="4,2" Width="170" />
+        </StackPanel>
 
-        <StackPanel Grid.Column="1" />
+        <control:LogListBox Margin="4" ItemsSource="{Binding Items}" />
 
-        <control:LogListBox Grid.Column="0"
-                         ItemsSource="{Binding Items}" />
-
-    </Grid>
+    </DockPanel>
 </Window>
