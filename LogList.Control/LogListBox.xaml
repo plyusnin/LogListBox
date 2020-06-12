@@ -7,15 +7,17 @@
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800"
              x:Name="Root" d:DataContext="{d:DesignInstance control:IListDataViewModel}">
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="Auto" />
-        </Grid.ColumnDefinitions>
-        <Canvas x:Name="HostCanvas" Grid.Column="0" ClipToBounds="True" />
-        <ScrollBar Grid.Column="1"
-                   Maximum="{Binding Path=Heights.ScrollableMaximum}"
-                   Value="{Binding Path=Heights.ListOffset}"
-                   ViewportSize="{Binding Path=Heights.ViewportHeight}" />
-    </Grid>
+    <Border BorderBrush="{x:Static SystemColors.InactiveBorderBrush}" BorderThickness="1">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Canvas x:Name="HostCanvas" Grid.Column="0" ClipToBounds="True" />
+            <ScrollBar Grid.Column="1"
+                       Maximum="{Binding Path=Heights.ScrollableMaximum}"
+                       Value="{Binding Path=Heights.ListOffset}"
+                       ViewportSize="{Binding Path=Heights.ViewportHeight}" />
+        </Grid>
+    </Border>
 </UserControl>
