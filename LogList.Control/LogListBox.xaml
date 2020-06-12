@@ -12,7 +12,7 @@
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
-        <Canvas x:Name="HostCanvas" Grid.Column="0" />
+        <Canvas x:Name="HostCanvas" Grid.Column="0" ClipToBounds="True" />
         <ScrollBar Grid.Column="1"
                    Maximum="{Binding Path=Heights.ScrollableMaximum}"
                    Value="{Binding Path=Heights.ListOffset}"

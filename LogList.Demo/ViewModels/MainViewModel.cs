@@ -4,7 +4,6 @@ using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Threading;
 using DynamicData;
-using DynamicData.Binding;
 using LogList.Control;
 using ReactiveUI;
 
@@ -19,18 +18,21 @@ namespace LogList.Demo.ViewModels
             var itemsSource = new SourceList<MyLogItem>();
 
             itemsSource.Connect()
-                       .Cast(x => (ILogItem)x)
+                       .Cast(x => (ILogItem) x)
                        .Bind(out var items)
                        .Subscribe();
 
             Items = new ListViewModel(items);
 
-            // Observable.Interval(TimeSpan.FromMilliseconds(40))
-            //           .ObserveOn(TaskPoolScheduler.Default)
-            //           .Subscribe(_ => itemsSource.Add(new MyLogItem(Interlocked.Increment(ref _id), DateTime.Now)));
+            var inserter = Observable.Interval(TimeSpan.FromMilliseconds(3000))
+                                     .ObserveOn(TaskPoolScheduler.Default)
+                                     .Do(_ => itemsSource.Add(
+                                             new MyLogItem(Interlocked.Increment(ref _id), DateTime.Now)));
             
-            itemsSource.AddRange(Enumerable.Range(0, 100).Select(i => new MyLogItem(Interlocked.Increment(ref _id), DateTime.Now.AddMinutes(i))));
-
+            var demoData = Enumerable.Range(0, 100).Select(i => new MyLogItem(Interlocked.Increment(ref _id), DateTime.Now.AddMinutes(i)));
+            
+            inserter.Subscribe();
+            itemsSource.AddRange(demoData);
         }
 
         public ListViewModel Items { get; set; }
