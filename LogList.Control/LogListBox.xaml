@@ -8,7 +8,7 @@
              d:DesignHeight="450" d:DesignWidth="800"
              x:Name="Root" d:DataContext="{d:DesignInstance control:IListDataViewModel}">
     <Border BorderBrush="{x:Static SystemColors.InactiveBorderBrush}" BorderThickness="1">
-        <Grid>
+        <Grid MouseWheel="OnMouseWheel" Background="Transparent">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -17,7 +17,9 @@
             <ScrollBar Grid.Column="1"
                        Maximum="{Binding Path=Heights.ScrollableMaximum}"
                        Value="{Binding Path=Heights.ListOffset}"
-                       ViewportSize="{Binding Path=Heights.ViewportHeight}" />
+                       ViewportSize="{Binding Path=Heights.ViewportHeight}"
+                       SmallChange="{Binding Path=Heights.SmallChange}"
+                       LargeChange="{Binding Path=Heights.ViewportHeight}" />
         </Grid>
     </Border>
 </UserControl>

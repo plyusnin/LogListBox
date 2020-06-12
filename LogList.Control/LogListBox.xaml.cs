@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reactive.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using DynamicData;
@@ -153,6 +154,15 @@ namespace LogList.Control
         {
             get => (IListDataViewModel) GetValue(ItemsSourceProperty);
             set => SetValue(ItemsSourceProperty, value);
+        }
+
+        #endregion
+
+        #region WPF Events
+
+        private void OnMouseWheel(object Sender, MouseWheelEventArgs E)
+        {
+            _dataViewModel.Heights.ListOffset -= E.Delta;
         }
 
         #endregion

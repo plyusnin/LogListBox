@@ -14,6 +14,7 @@ namespace LogList.Control
 
         private readonly ObservableAsPropertyHelper<double> _listHeight;
         private readonly ObservableAsPropertyHelper<double> _scrollableMaximum;
+        private ObservableAsPropertyHelper<double> _smallChange;
 
         private double _listOffset;
         private double _viewportHeight;
@@ -38,6 +39,10 @@ namespace LogList.Control
                               x => x.ViewportHeight,
                               (l, v) => Math.Max(0, l - v))
                 .ToProperty(this, x => x.ScrollableMaximum, out _scrollableMaximum);
+
+            this.WhenAnyValue(x => x.ItemHeight)
+                .Select(h => h * 3)
+                .ToProperty(this, x => x.SmallChange, out _smallChange);
         }
 
 
@@ -47,11 +52,12 @@ namespace LogList.Control
 
         public double ListHeight        => _listHeight.Value;
         public double ScrollableMaximum => _scrollableMaximum.Value;
+        public double SmallChange => _smallChange.Value;
 
         public double ListOffset
         {
             get => _listOffset;
-            set => this.RaiseAndSetIfChanged(ref _listOffset, value);
+            set => this.RaiseAndSetIfChanged(ref _listOffset, Math.Max(0, Math.Min(ScrollableMaximum, value)));
         }
 
         public double ViewportHeight

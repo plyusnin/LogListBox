@@ -37,7 +37,7 @@ namespace LogList.Demo.ViewModels
                                      .Do(_ => itemsSource.Add(
                                              new MyLogItem(Interlocked.Increment(ref _id), DateTime.Now)));
 
-            var demoData = Enumerable.Range(0, 100)
+            var demoData = Enumerable.Range(0, 10000)
                                      .Select(i => new MyLogItem(Interlocked.Increment(ref _id),
                                                                 DateTime.Now.AddMinutes(i)));
 
