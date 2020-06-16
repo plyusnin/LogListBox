@@ -16,6 +16,7 @@ namespace LogList.Demo.ViewModels
 
         public MainViewModel()
         {
+            var r           = new Random();
             var itemsSource = new SourceList<MyLogItem>();
 
             var filter = this.WhenAnyValue(x => x.Filter)
@@ -35,13 +36,15 @@ namespace LogList.Demo.ViewModels
             var inserter = Observable.Interval(TimeSpan.FromMilliseconds(3000))
                                      .ObserveOn(TaskPoolScheduler.Default)
                                      .Do(_ => itemsSource.Add(
-                                             new MyLogItem(Interlocked.Increment(ref _id), DateTime.Now)));
+                                             new MyLogItem(Interlocked.Increment(ref _id), DateTime.Now,
+                                                           r.Next(4))));
 
             var demoData = Enumerable.Range(0, 10000)
                                      .Select(i => new MyLogItem(Interlocked.Increment(ref _id),
-                                                                DateTime.Now.AddMinutes(i)));
+                                                                DateTime.Now.AddMinutes(i),
+                                                                r.Next(4)));
 
-            inserter.Subscribe();
+            //inserter.Subscribe();
             itemsSource.AddRange(demoData);
         }
 
