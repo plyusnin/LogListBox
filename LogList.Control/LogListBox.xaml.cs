@@ -63,7 +63,7 @@ namespace LogList.Control
             if (_skipAnimations)
                 return;
 
-            var easingFunction = new PowerEase { EasingMode = EasingMode.EaseOut };
+            var easingFunction = new PowerEase { EasingMode = EasingMode.EaseInOut };
 
             var shift = NewItems.OfType<System.Windows.Controls.Control>().Sum(i => i.Height);
 
@@ -83,21 +83,17 @@ namespace LogList.Control
 
         private void AddItem(ContentPresenter Item)
         {
-            var easingFunction = new ElasticEase { EasingMode = EasingMode.EaseOut, Oscillations = 2 };
+            var easingFunction = new PowerEase { EasingMode = EasingMode.EaseInOut };
 
             HostCanvas.Children.Add(Item);
             if (!_skipAnimations)
-            {
                 Item.BeginAnimation(OpacityProperty,
-                                    new DoubleAnimation { From = 0, Duration = TimeSpan.FromMilliseconds(200) });
-                Item.BeginAnimation(Canvas.LeftProperty,
                                     new DoubleAnimation
                                     {
-                                        From           = 50,
-                                        Duration       = TimeSpan.FromMilliseconds(500),
+                                        From           = 0,
+                                        Duration       = TimeSpan.FromMilliseconds(600),
                                         EasingFunction = easingFunction
                                     });
-            }
         }
 
         private void RemoveItem(ContentPresenter Item)
