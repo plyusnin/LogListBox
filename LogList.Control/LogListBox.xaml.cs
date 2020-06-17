@@ -35,8 +35,6 @@ namespace LogList.Control
             _dataViewModel.Heights.ViewportHeight = HostCanvas.ActualHeight;
 
             Data.VisibleItems
-                .RemoveKey()
-                .Sort(SortExpressionComparer<ILogItem>.Ascending(x => x.Time), SortOptions.UseBinarySearch)
                 .ObserveOnDispatcher()
                 .Transform(GetItemPresenter)
                 .OnItemAdded(AddItem)
@@ -129,6 +127,15 @@ namespace LogList.Control
                 _dataViewModel.Heights.ViewportHeight = HostCanvas.ActualHeight;
         }
 
+        #region WPF Events
+
+        private void OnMouseWheel(object Sender, MouseWheelEventArgs E)
+        {
+            _dataViewModel.Heights.ListOffset -= E.Delta;
+        }
+
+        #endregion
+
         #region Properties
 
         public static readonly DependencyProperty ItemsSourceProperty = DependencyProperty.Register(
@@ -150,15 +157,6 @@ namespace LogList.Control
         {
             get => (IListDataViewModel) GetValue(ItemsSourceProperty);
             set => SetValue(ItemsSourceProperty, value);
-        }
-
-        #endregion
-
-        #region WPF Events
-
-        private void OnMouseWheel(object Sender, MouseWheelEventArgs E)
-        {
-            _dataViewModel.Heights.ListOffset -= E.Delta;
         }
 
         #endregion

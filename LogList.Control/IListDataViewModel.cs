@@ -6,7 +6,7 @@ namespace LogList.Control
 {
     public interface IListDataViewModel : INotifyPropertyChanged
     {
-        IObservable<IVirtualChangeSet<ILogItem, int>> VisibleItems { get; }
+        IObservable<IVirtualChangeSet<ILogItem>> VisibleItems { get; }
         HeightViewModel Heights { get; }
     }
 }

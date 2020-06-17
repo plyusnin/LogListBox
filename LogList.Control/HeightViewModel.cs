@@ -20,7 +20,7 @@ namespace LogList.Control
         private double _viewportHeight;
         private VirtualRequest _lastRequest;
 
-        public HeightViewModel(IObservable<ISortedChangeSet<ILogItem, int>> Items, double ItemHeight = 25)
+        public HeightViewModel(IObservable<IChangeSet<ILogItem>> Items, double ItemHeight = 25)
         {
             this.ItemHeight = ItemHeight;
 

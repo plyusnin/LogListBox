@@ -44,7 +44,7 @@ namespace LogList.Demo.ViewModels
                                                                 DateTime.Now.AddMinutes(i),
                                                                 r.Next(4)));
 
-            //inserter.Subscribe();
+            inserter.Subscribe();
             itemsSource.AddRange(demoData);
         }
 
