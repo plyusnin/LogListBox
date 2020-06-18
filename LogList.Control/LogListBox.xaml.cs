@@ -271,22 +271,26 @@ namespace LogList.Control
                     IsAdditive     = true
                 };
                 if (RemoveAfterMove)
-                    animation.Completed += (Sender, Args) => { RemoveItem(Item); };
+                {
+                    RemoveItem(Item, false);
+                    animation.Completed += (Sender, Args) => HostCanvas.Children.Remove(container);
+                }
 
                 container.BeginAnimation(Canvas.TopProperty, animation);
             }
             else
             {
                 if (RemoveAfterMove)
-                    RemoveItem(Item);
+                    RemoveItem(Item, true);
             }
         }
-
-        private void RemoveItem(ILogItem Item)
+        
+        private void RemoveItem(ILogItem Item, Boolean RemoveFromVisualTree)
         {
             var container = _containers[Item];
-            HostCanvas.Children.Remove(container);
             _containers.Remove(Item);
+            if (RemoveFromVisualTree)
+                HostCanvas.Children.Remove(container);
         }
 
         private void FadeInItem(ILogItem Item)
@@ -306,6 +310,9 @@ namespace LogList.Control
 
         private void CreateItem(ILogItem Item, int Index)
         {
+            if (_containers.ContainsKey(Item))
+                return;
+            
             var yPosition = _dataViewModel.Heights.RelativeOffsetFromIndex(Index);
 
             var presenter = new ContentPresenter
@@ -325,7 +332,7 @@ namespace LogList.Control
         {
             if (!_animate)
             {
-                RemoveItem(Item);
+                RemoveItem(Item, true);
                 return;
             }
 
@@ -340,7 +347,8 @@ namespace LogList.Control
                 EasingFunction = easingFunction
             };
 
-            animation.Completed += (Sender, Args) => { RemoveItem(Item); };
+            RemoveItem(Item, false);
+            animation.Completed += (Sender, Args) => HostCanvas.Children.Remove(container);
 
             container.BeginAnimation(OpacityProperty, animation);
         }
