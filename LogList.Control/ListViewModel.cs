@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using DynamicData;
 using DynamicData.Binding;
 using ReactiveUI;
@@ -16,15 +15,8 @@ namespace LogList.Control
                                 SortOptions.UseBinarySearch);
 
             Heights = new HeightViewModel(sortedOriginals);
-
-            var visibleItems = sortedOriginals
-               .Virtualise(Heights.PagingRequests);
-
-            VisibleItems = visibleItems;
         }
 
         public HeightViewModel Heights { get; }
-
-        public IObservable<IVirtualChangeSet<ILogItem>> VisibleItems { get; }
     }
 }

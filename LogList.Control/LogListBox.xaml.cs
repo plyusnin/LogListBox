@@ -1,14 +1,12 @@
 using System;
-using System.Collections;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Collections.Specialized;
 using System.Linq;
 using System.Reactive.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
-using System.Windows.Threading;
 using DynamicData;
 using DynamicData.Binding;
 using ReactiveUI;
@@ -17,107 +15,201 @@ namespace LogList.Control
 {
     public partial class LogListBox : UserControl
     {
+        private bool _animate;
         private IListDataViewModel _dataViewModel;
-        private ReadOnlyObservableCollection<ContentPresenter> _items;
+
+
+        private VirtualRequest _pagingRequest;
+
+        private List<ILogItem> _visibleItems = new List<ILogItem>();
+
 
         public LogListBox()
         {
             InitializeComponent();
         }
 
-        private void Attach(IListDataViewModel Data)
+        private void Attach(ReadOnlyObservableCollection<ILogItem> Collection)
         {
-            if (Data == null)
+            if (Collection == null)
                 return;
 
-            DataContext                           = Data;
-            _dataViewModel                        = Data;
+            var viewModel = new ListViewModel(Collection);
+
+            DataContext                           = viewModel;
+            _dataViewModel                        = viewModel;
             _dataViewModel.Heights.ViewportHeight = HostCanvas.ActualHeight;
 
-            Data.VisibleItems
-                .ObserveOnDispatcher()
-                .Transform(GetItemPresenter)
-                .OnItemAdded(AddItem)
-                .OnItemRemoved(RemoveItem)
-                .Bind(out _items)
-                .Do(_ => RefreshPositions())
-                .Subscribe();
+            var pagingRequests = viewModel.Heights.PagingRequests;
 
-            _items.ObserveCollectionChanges()
-                  .Where(ch => ch.EventArgs.Action == NotifyCollectionChangedAction.Add)
-                  .Subscribe(ch => AnimateInsertion(ch.EventArgs.NewItems, ch.EventArgs.NewStartingIndex));
+            pagingRequests.Subscribe(r => _pagingRequest = r);
+
+            Collection.ToObservableChangeSet()
+                      .Sort(SortExpressionComparer<ILogItem>.Ascending(x => x.Time),
+                            SortOptions.UseBinarySearch)
+                      .Do(_ => _animate = true)
+                      .ObserveOnDispatcher()
+                      .Virtualise(pagingRequests)
+                      .Do(x => { })
+                      .ToCollection()
+                      .Select(ProcessListToTransitions)
+                      .Do(ApplyTransactions)
+                      .Subscribe(_ => _animate = false);
 
             _dataViewModel.Heights.WhenAnyValue(x => x.ListOffset)
-                          .Do(_ =>
-                           {
-                               _skipAnimations = true;
-                               Dispatcher.BeginInvoke(() => _skipAnimations = false);
-                           })
-                          .Subscribe(_ => RefreshPositions());
+                          .Subscribe(OnScroll);
         }
 
-        private void AnimateInsertion(IList NewItems, int NewStartingIndex)
+        private IList<ItemTransition> ProcessListToTransitions(IReadOnlyCollection<ILogItem> NewItems)
         {
-            if (_skipAnimations)
-                return;
+            var top    = new List<ItemTransition>();
+            var middle = new List<ItemTransition>();
+            var bottom = new List<ItemTransition>();
 
-            var easingFunction = new PowerEase { EasingMode = EasingMode.EaseInOut };
+            var stage = 0;
 
-            var shift = NewItems.OfType<System.Windows.Controls.Control>().Sum(i => i.Height);
+            var allNew = NewItems.Select((item, index) =>
+                                             new
+                                             {
+                                                 item,
+                                                 index,
+                                                 isNew = !_visibleItems.Contains(item)
+                                             })
+                                 .Where(x => x.isNew)
+                                 .ToList();
 
-            for (var i = NewStartingIndex + NewItems.Count; i < _items.Count; i++)
+            List<ItemTransition> @new;
+            if (_visibleItems.Any())
             {
-                var item = _items[i];
-                item.BeginAnimation(Canvas.TopProperty,
-                                    new DoubleAnimation
-                                    {
-                                        From           = (double) item.GetValue(Canvas.TopProperty) - shift,
-                                        Duration       = TimeSpan.FromMilliseconds(300),
-                                        EasingFunction = easingFunction,
-                                        IsAdditive     = true
-                                    });
+                var oldMostTopTime = _visibleItems.First().Time;
+                var topNew         = allNew.Where(x => x.item.Time < oldMostTopTime).ToList();
+                var topNewTransitions = topNew.Select((item, index) => new ItemTransition(item.item)
+                                                          { To = item.index, From = index - topNew.Count, New = true });
+
+                var oldMotBottomTime = _visibleItems.Last().Time;
+                var bottomNew        = allNew.Where(x => x.item.Time > oldMotBottomTime).ToList();
+                var bottomNewTransitions = bottomNew.Select((item, index) => new ItemTransition(item.item)
+                {
+                    To = item.index, From = _pagingRequest.Size + index, New = true
+                });
+
+                var middleNewTransitions = allNew
+                                          .Where(x => x.item.Time >= oldMostTopTime && x.item.Time <= oldMotBottomTime)
+                                          .Select(x => new ItemTransition(x.item)
+                                                      { To = x.index, New = true, Inserted = true });
+
+                @new = topNewTransitions.Concat(middleNewTransitions).Concat(bottomNewTransitions).ToList();
             }
-        }
-
-        private void AddItem(ContentPresenter Item)
-        {
-            var easingFunction = new PowerEase { EasingMode = EasingMode.EaseInOut };
-
-            HostCanvas.Children.Add(Item);
-            if (!_skipAnimations)
-                Item.BeginAnimation(OpacityProperty,
-                                    new DoubleAnimation
-                                    {
-                                        From           = 0,
-                                        Duration       = TimeSpan.FromMilliseconds(600),
-                                        EasingFunction = easingFunction
-                                    });
-        }
-
-        private void RemoveItem(ContentPresenter Item)
-        {
-            HostCanvas.Children.Remove(Item);
-        }
-
-        private void RefreshPositions()
-        {
-            for (var i = 0; i < _items.Count; i++)
+            else
             {
-                var offset = _dataViewModel.Heights.RelativeOffsetFromIndex(i);
-                _items[i].SetValue(Canvas.TopProperty, offset);
+                @new = allNew.Select(x => new ItemTransition(x.item) { To = x.index, New = true, Inserted = true })
+                             .ToList();
             }
+
+            for (var i = 0; i < _visibleItems.Count; i++)
+            {
+                var item     = _visibleItems[i];
+                var newIndex = NewItems.IndexOf(item);
+
+                switch (stage)
+                {
+                    case 0:
+                        if (newIndex == -1)
+                        {
+                            top.Add(new ItemTransition(item) { From = i });
+                        }
+                        else
+                        {
+                            middle.Add(new ItemTransition(item) { From = i, To = newIndex });
+                            stage = 1;
+                        }
+
+                        break;
+
+                    case 1:
+                        if (newIndex == -1)
+                        {
+                            bottom.Add(new ItemTransition(item) { From = i });
+                        }
+                        else
+                        {
+                            middle.AddRange(bottom.Select(it => new ItemTransition(it.Item)
+                                                              { From = it.From, Deleted = true }));
+                            middle.Add(new ItemTransition(item) { From = i, To = newIndex });
+                            bottom.Clear();
+                        }
+
+                        break;
+                }
+            }
+
+            #region Слишком сложный алгоритм
+
+            // if (top.Any())
+            // {
+            //     int topListBottomIndex = _pagingRequest.StartIndex;
+            //     int topListTopIndex = 0;
+            //
+            //     for (int i = 0; i < top.Count; i++)
+            //     {
+            //         var index = _collection.BinarySearch(top[i].Item, 0, topListBottomIndex);
+            //         if (index != -1)
+            //         {
+            //             topListBottomIndex = index;
+            //             break;
+            //         }
+            //     }
+            //     
+            //     for (int i = top.Count - 1; i >= 0; i--)
+            //     {
+            //         var bottomIndex = _collection.BinarySearch(top[^i].Item, topListTopIndex, topListBottomIndex);
+            //         if (bottomIndex != -1)
+            //         {
+            //             top[^i]
+            //         }
+            //     }
+            // }
+
+            #endregion
+
+            for (var i = 1; i <= top.Count; i++)
+                top[^i] = new ItemTransition(top[^i].Item) { From = top[^i].From, To = -i, RemoveAfterMove = true };
+
+            for (var i = 0; i < bottom.Count; i++)
+                bottom[i] = new ItemTransition(bottom[i].Item)
+                    { From = bottom[i].From, To = _pagingRequest.Size + i, RemoveAfterMove = true };
+
+            return new[] { top, middle, bottom, @new }.SelectMany(x => x).ToList();
         }
 
-        private ContentPresenter GetItemPresenter(ILogItem ItemData)
+        private void ApplyTransactions(IList<ItemTransition> Transactions)
         {
-            var presenter = new ContentPresenter
+            foreach (var newItem in Transactions.Where(t => t.New))
+                CreateItem(newItem.Item, newItem.To);
+
+            foreach (var itemTransition in Transactions)
+                if (itemTransition.Inserted)
+                    FadeInItem(itemTransition.Item);
+                else if (itemTransition.Deleted)
+                    FadeOutItem(itemTransition.Item);
+                else
+                    MoveItem(itemTransition.Item, itemTransition.From, itemTransition.To,
+                             itemTransition.RemoveAfterMove);
+
+            _visibleItems = Transactions.Where(t => !t.Deleted && !t.RemoveAfterMove)
+                                        .OrderBy(t => t.To)
+                                        .Select(t => t.Item)
+                                        .ToList();
+        }
+
+        private void OnScroll(double Offset)
+        {
+            for (var i = 0; i < _visibleItems.Count; i++)
             {
-                Content = ItemData,
-                Height  = _dataViewModel.Heights.ItemHeight,
-                Width   = Width
-            };
-            presenter.SetValue(Canvas.LeftProperty, 0.0);
-            return presenter;
+                var container = _containers[_visibleItems[i]];
+                container.SetValue(Canvas.TopProperty,
+                                   _dataViewModel.Heights.RelativeOffsetFromIndex(i));
+            }
         }
 
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
@@ -136,19 +228,140 @@ namespace LogList.Control
 
         #endregion
 
+        private struct ItemTransition
+        {
+            public ItemTransition(ILogItem Item) : this()
+            {
+                this.Item = Item;
+            }
+
+            public ILogItem Item            { get; }
+            public int      From            { get; set; }
+            public int      To              { get; set; }
+            public bool     Deleted         { get; set; }
+            public bool     New             { get; set; }
+            public bool     RemoveAfterMove { get; set; }
+            public bool     Inserted        { get; set; }
+
+            public override string ToString()
+            {
+                if (New)
+                    return $"+ {To}  {Item}";
+                if (Deleted)
+                    return $"- {From}  {Item}";
+                return $"{From} -> {To}  {Item}";
+            }
+        }
+
+        #region Transitions
+
+        private void MoveItem(ILogItem Item, int From, int To, bool RemoveAfterMove)
+        {
+            var container = _containers[Item];
+            container.SetValue(Canvas.TopProperty, _dataViewModel.Heights.OffsetFromIndex(To));
+
+            if (_animate)
+            {
+                var easingFunction = new PowerEase { EasingMode = EasingMode.EaseInOut };
+                var animation = new DoubleAnimation
+                {
+                    From           = _dataViewModel.Heights.OffsetFromIndex(From),
+                    Duration       = TimeSpan.FromMilliseconds(300),
+                    EasingFunction = easingFunction,
+                    IsAdditive     = true
+                };
+                if (RemoveAfterMove)
+                    animation.Completed += (Sender, Args) => { RemoveItem(Item); };
+
+                container.BeginAnimation(Canvas.TopProperty, animation);
+            }
+            else
+            {
+                if (RemoveAfterMove)
+                    RemoveItem(Item);
+            }
+        }
+
+        private void RemoveItem(ILogItem Item)
+        {
+            var container = _containers[Item];
+            HostCanvas.Children.Remove(container);
+            _containers.Remove(Item);
+        }
+
+        private void FadeInItem(ILogItem Item)
+        {
+            if (!_animate) return;
+
+            var container      = _containers[Item];
+            var easingFunction = new PowerEase { EasingMode = EasingMode.EaseInOut };
+            container.BeginAnimation(OpacityProperty,
+                                     new DoubleAnimation
+                                     {
+                                         From           = 0,
+                                         Duration       = TimeSpan.FromMilliseconds(600),
+                                         EasingFunction = easingFunction
+                                     });
+        }
+
+        private void CreateItem(ILogItem Item, int Index)
+        {
+            var yPosition = _dataViewModel.Heights.RelativeOffsetFromIndex(Index);
+
+            var presenter = new ContentPresenter
+            {
+                Content = Item,
+                Height  = _dataViewModel.Heights.ItemHeight,
+                Width   = Width
+            };
+            presenter.SetValue(Canvas.LeftProperty, 0.0);
+            presenter.SetValue(Canvas.TopProperty,  yPosition);
+
+            _containers.Add(Item, presenter);
+            HostCanvas.Children.Add(presenter);
+        }
+
+        private void FadeOutItem(ILogItem Item)
+        {
+            if (!_animate)
+            {
+                RemoveItem(Item);
+                return;
+            }
+
+            var easingFunction = new PowerEase { EasingMode = EasingMode.EaseInOut };
+
+            var container = _containers[Item];
+
+            var animation = new DoubleAnimation
+            {
+                To             = 0.0,
+                Duration       = TimeSpan.FromMilliseconds(300),
+                EasingFunction = easingFunction
+            };
+
+            animation.Completed += (Sender, Args) => { RemoveItem(Item); };
+
+            container.BeginAnimation(OpacityProperty, animation);
+        }
+
+        #endregion
+
         #region Properties
 
         public static readonly DependencyProperty ItemsSourceProperty = DependencyProperty.Register(
-            "ItemsSource", typeof(IListDataViewModel), typeof(LogListBox),
-            new PropertyMetadata(default(IListDataViewModel),
+            "ItemsSource", typeof(ReadOnlyObservableCollection<ILogItem>), typeof(LogListBox),
+            new PropertyMetadata(null,
                                  ItemsSourceChangedCallback));
 
-        private bool _skipAnimations;
+
+        private readonly Dictionary<ILogItem, ContentPresenter> _containers =
+            new Dictionary<ILogItem, ContentPresenter>();
 
 
         private static void ItemsSourceChangedCallback(DependencyObject D, DependencyPropertyChangedEventArgs E)
         {
-            var data    = (IListDataViewModel) E.NewValue;
+            var data    = (ReadOnlyObservableCollection<ILogItem>) E.NewValue;
             var control = (LogListBox) D;
             control.Attach(data);
         }

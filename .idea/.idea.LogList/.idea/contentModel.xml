@@ -7,6 +7,7 @@
       <e p="LogList.Control" t="IncludeRecursive">
         <e p="AssemblyInfo.cs" t="Include" />
         <e p="bin" t="ExcludeRecursive" />
+        <e p="BinarySearchExtensions.cs" t="Include" />
         <e p="Child.cs" t="Include" />
         <e p="HeightViewModel.cs" t="Include" />
         <e p="IListDataViewModel.cs" t="Include" />

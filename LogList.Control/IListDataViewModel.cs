@@ -1,12 +1,9 @@
-﻿using System;
-using System.ComponentModel;
-using DynamicData;
+﻿using System.ComponentModel;
 
 namespace LogList.Control
 {
     public interface IListDataViewModel : INotifyPropertyChanged
     {
-        IObservable<IVirtualChangeSet<ILogItem>> VisibleItems { get; }
         HeightViewModel Heights { get; }
     }
 }

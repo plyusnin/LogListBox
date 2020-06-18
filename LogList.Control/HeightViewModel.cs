@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
-using System.Reactive.Subjects;
 using DynamicData;
 using DynamicData.Aggregation;
 using ReactiveUI;
@@ -14,20 +13,20 @@ namespace LogList.Control
 
         private readonly ObservableAsPropertyHelper<double> _listHeight;
         private readonly ObservableAsPropertyHelper<double> _scrollableMaximum;
-        private ObservableAsPropertyHelper<double> _smallChange;
+        private readonly ObservableAsPropertyHelper<double> _smallChange;
+        private VirtualRequest _lastRequest;
 
         private double _listOffset;
         private double _viewportHeight;
-        private VirtualRequest _lastRequest;
 
         public HeightViewModel(IObservable<IChangeSet<ILogItem>> Items, double ItemHeight = 25)
         {
             this.ItemHeight = ItemHeight;
 
-            CountEx.Count(Items)
-                   .Select(c => c * ItemHeight)
-                   .ToProperty(this, x => x.ListHeight, out _listHeight)
-                   .DisposeWith(_cleanup);
+            Items.Count()
+                 .Select(c => c * ItemHeight)
+                 .ToProperty(this, x => x.ListHeight, out _listHeight)
+                 .DisposeWith(_cleanup);
 
             PagingRequests = this.WhenAnyValue(x => x.ListOffset,
                                                x => x.ViewportHeight,
@@ -52,7 +51,7 @@ namespace LogList.Control
 
         public double ListHeight        => _listHeight.Value;
         public double ScrollableMaximum => _scrollableMaximum.Value;
-        public double SmallChange => _smallChange.Value;
+        public double SmallChange       => _smallChange.Value;
 
         public double ListOffset
         {
@@ -86,7 +85,7 @@ namespace LogList.Control
             return ItemHeight * Index;
         }
 
-        public double RelativeOffsetFromIndex(in int IndexOnPage)
+        public double RelativeOffsetFromIndex(int IndexOnPage)
         {
             return OffsetFromIndex(IndexOnPage + _lastRequest?.StartIndex ?? 0) - ListOffset;
         }

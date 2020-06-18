@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
@@ -31,24 +32,25 @@ namespace LogList.Demo.ViewModels
                        .Bind(out var items)
                        .Subscribe();
 
-            Items = new ListViewModel(items);
+            Items = items;
 
+            var sources = 2;
             var inserter = Observable.Interval(TimeSpan.FromMilliseconds(3000))
                                      .ObserveOn(TaskPoolScheduler.Default)
                                      .Do(_ => itemsSource.Add(
                                              new MyLogItem(Interlocked.Increment(ref _id), DateTime.Now,
-                                                           r.Next(4))));
+                                                           r.Next(sources))));
 
-            var demoData = Enumerable.Range(0, 10000)
+            var demoData = Enumerable.Range(0, 100)
                                      .Select(i => new MyLogItem(Interlocked.Increment(ref _id),
                                                                 DateTime.Now.AddMinutes(i),
-                                                                r.Next(4)));
+                                                                r.Next(sources)));
 
-            inserter.Subscribe();
+            //inserter.Subscribe();
             itemsSource.AddRange(demoData);
         }
 
-        public ListViewModel Items { get; set; }
+        public ReadOnlyObservableCollection<ILogItem> Items { get; set; }
 
         public string Filter
         {
