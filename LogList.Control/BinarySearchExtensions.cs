@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 
 namespace LogList.Control
 {
@@ -7,25 +6,23 @@ namespace LogList.Control
     {
         public static int BinarySearch(this ReadOnlyObservableCollection<ILogItem> Collection, ILogItem Item, int StartIndex, int EndIndex)
         {
-            if (Collection[StartIndex].Time < Item.Time)
+            if (Item.Time < Collection[StartIndex].Time)
                 return -1;
-            if (Collection[EndIndex].Time > Item.Time)
+            if (Item.Time > Collection[EndIndex].Time)
                 return -1;
 
-            while (EndIndex - StartIndex > 0)
+            while (EndIndex - StartIndex > 2)
             {
-                int middleIndex = (StartIndex + EndIndex) / 2;
+                var middleIndex = (StartIndex + EndIndex) / 2;
                 if (Collection[middleIndex].Time > Item.Time)
                     EndIndex = middleIndex;
                 else
                     StartIndex = middleIndex;
             }
 
-            for (int i = StartIndex; Collection[i].Time == Item.Time; i++)
-            {
+            for (var i = StartIndex; Collection[i].Time <= Item.Time; i++)
                 if (Collection[i] == Item)
                     return i;
-            }
 
             return -1;
         }
