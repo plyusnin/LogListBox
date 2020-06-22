@@ -40,7 +40,6 @@ namespace LogList.Control
             var locker = new object();
 
             Collection.ToObservableChangeSet()
-                      .Synchronize(locker)
                       .Buffer(TimeSpan.FromMilliseconds(100))
                       .Where(l => l.Count > 0)
                       .ObserveOnDispatcher()
@@ -67,7 +66,7 @@ namespace LogList.Control
                .Subscribe(r => _pagingRequest = r);
 
             collectionChanges.Do(changes => _animate |= AreThereChangesInsideOfRange(changes))
-                             .Do(changes => ScrollIfNeeded(changes))
+                             .Do(ScrollIfNeeded)
                              .Virtualise(pagingRequests)
                              .ToCollection()
                              .DistinctByDispatcher(DispatcherPriority.Loaded)
@@ -80,6 +79,7 @@ namespace LogList.Control
             _dataViewModel.Heights.WhenAnyValue(x => x.ListOffset)
                           .Do(_ => _viewingPosition = GetViewingPosition())
                           .Subscribe();
+            
             _dataViewModel.Heights.WhenAnyValue(x => x.ListOffset)
                           .Subscribe(OnScroll);
         }
@@ -204,35 +204,6 @@ namespace LogList.Control
                 }
             }
 
-            #region Слишком сложный алгоритм
-
-            // if (top.Any())
-            // {
-            //     int topListBottomIndex = _pagingRequest.StartIndex;
-            //     int topListTopIndex = 0;
-            //
-            //     for (int i = 0; i < top.Count; i++)
-            //     {
-            //         var index = _collection.BinarySearch(top[i].Item, 0, topListBottomIndex);
-            //         if (index != -1)
-            //         {
-            //             topListBottomIndex = index;
-            //             break;
-            //         }
-            //     }
-            //     
-            //     for (int i = top.Count - 1; i >= 0; i--)
-            //     {
-            //         var bottomIndex = _collection.BinarySearch(top[^i].Item, topListTopIndex, topListBottomIndex);
-            //         if (bottomIndex != -1)
-            //         {
-            //             top[^i]
-            //         }
-            //     }
-            // }
-
-            #endregion
-
             for (var i = 1; i <= top.Count; i++)
                 top[^i] = new ItemTransition(top[^i].Item) { From = top[^i].From, To = -i, RemoveAfterMove = true };
 
@@ -242,15 +213,11 @@ namespace LogList.Control
 
 
             var transitions = new[] { top, middle, bottom, @new }.SelectMany(x => x).ToList();
-            Console.WriteLine($"Prepared {transitions.GetHashCode():x}");
-
             return transitions;
         }
 
         private void ApplyTransitions(IList<ItemTransition> Transitions)
         {
-            Console.WriteLine($"Rendered {Transitions.GetHashCode():x} (Animations: {_animate})");
-
             foreach (var newItem in Transitions.Where(t => t.New))
                 CreateItem(newItem.Item, newItem.To);
 
