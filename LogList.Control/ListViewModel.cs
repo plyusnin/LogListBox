@@ -1,20 +1,13 @@
-﻿using System.Collections.ObjectModel;
-using DynamicData;
-using DynamicData.Binding;
+﻿using System;
 using ReactiveUI;
 
 namespace LogList.Control
 {
     public class ListViewModel : ReactiveObject, IListDataViewModel
     {
-        public ListViewModel(ReadOnlyObservableCollection<ILogItem> Collection)
+        public ListViewModel(IObservable<int> SourceSize)
         {
-            var sortedOriginals =
-                Collection.ToObservableChangeSet()
-                          .Sort(SortExpressionComparer<ILogItem>.Ascending(x => x.Time),
-                                SortOptions.UseBinarySearch);
-
-            Heights = new HeightViewModel(sortedOriginals);
+            Heights = new HeightViewModel(SourceSize);
         }
 
         public HeightViewModel Heights { get; }

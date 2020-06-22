@@ -19,11 +19,11 @@ namespace LogList.Control
         private double _listOffset;
         private double _viewportHeight;
 
-        public HeightViewModel(IObservable<IChangeSet<ILogItem>> Items, double ItemHeight = 25)
+        public HeightViewModel(IObservable<int> SourceSize, double ItemHeight = 25)
         {
             this.ItemHeight = ItemHeight;
 
-            Items.Count()
+            SourceSize
                  .Select(c => c * ItemHeight)
                  .ToProperty(this, x => x.ListHeight, out _listHeight)
                  .DisposeWith(_cleanup);
@@ -32,6 +32,7 @@ namespace LogList.Control
                                                x => x.ViewportHeight,
                                                (offset, height) => new { offset, height })
                                  .Select(x => new VirtualRequest(IndexFromOffset(x.offset), Count(x.offset, x.height)))
+                                 .DistinctUntilChanged()
                                  .Do(rq => _lastRequest = rq);
 
             this.WhenAnyValue(x => x.ListHeight,
@@ -80,7 +81,7 @@ namespace LogList.Control
             return (int) Math.Floor(Offset / ItemHeight);
         }
 
-        public double OffsetFromIndex(double Index)
+        public double OffsetFromIndex(int Index)
         {
             return ItemHeight * Index;
         }

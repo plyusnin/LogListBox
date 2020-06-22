@@ -7,7 +7,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using DynamicData;
+using DynamicData.Aggregation;
 using DynamicData.Binding;
 using ReactiveUI;
 
@@ -16,6 +18,7 @@ namespace LogList.Control
     public partial class LogListBox : UserControl
     {
         private bool _animate;
+        private ReadOnlyObservableCollection<ILogItem> _collection;
         private IListDataViewModel _dataViewModel;
 
 
@@ -34,7 +37,24 @@ namespace LogList.Control
             if (Collection == null)
                 return;
 
-            var viewModel = new ListViewModel(Collection);
+            var locker = new object();
+
+            Collection.ToObservableChangeSet()
+                      .Synchronize(locker)
+                      .Buffer(TimeSpan.FromMilliseconds(100))
+                      .Where(l => l.Count > 0)
+                      .ObserveOnDispatcher()
+                      .Synchronize(locker)
+                      .SelectMany(l => l)
+                      .Sort(SortExpressionComparer<ILogItem>.Ascending(x => x.Time),
+                            SortOptions.UseBinarySearch)
+                      .Bind(out _collection)
+                      .Subscribe();
+
+            var collectionChanges = _collection.ToObservableChangeSet()
+                                               .Synchronize(locker);
+
+            var viewModel = new ListViewModel(collectionChanges.Count());
 
             DataContext                           = viewModel;
             _dataViewModel                        = viewModel;
@@ -42,22 +62,89 @@ namespace LogList.Control
 
             var pagingRequests = viewModel.Heights.PagingRequests;
 
-            pagingRequests.Subscribe(r => _pagingRequest = r);
+            pagingRequests
+               .Synchronize(locker)
+               .Subscribe(r => _pagingRequest = r);
 
-            Collection.ToObservableChangeSet()
-                      .Sort(SortExpressionComparer<ILogItem>.Ascending(x => x.Time),
-                            SortOptions.UseBinarySearch)
-                      .Do(_ => _animate = true)
-                      .ObserveOnDispatcher()
-                      .Virtualise(pagingRequests)
-                      .Do(x => { })
-                      .ToCollection()
-                      .Select(ProcessListToTransitions)
-                      .Do(ApplyTransactions)
-                      .Subscribe(_ => _animate = false);
+            collectionChanges.Do(changes => _animate |= AreThereChangesInsideOfRange(changes))
+                             .Virtualise(pagingRequests)
+                             .ToCollection()
+                             .DistinctByDispatcher(DispatcherPriority.Loaded)
+                             .Synchronize(locker)
+                             .Select(ProcessListToTransitions)
+                             .Do(ApplyTransitions)
+                             .Subscribe(_ => _animate = false);
+
+            // Collection.ToObservableChangeSet()
+            //            //.Buffer(TimeSpan.FromMilliseconds(100))
+            //            //.Where(l => l.Count > 0)
+            //           .ObserveOnDispatcher()
+            //            //.Do(l => Console.WriteLine(l.Count))
+            //            //.SelectMany(l => l)
+            //           .Sort(SortExpressionComparer<ILogItem>.Ascending(x => x.Time),
+            //                 SortOptions.UseBinarySearch)
+            //           .Bind(out _collection)
+            //            //           //.Do(_ => Rescroll())
+            //           .Do(changes => _animate = AreThereChangesInsideOfRange(changes))
+            //           .Virtualise(pagingRequests)
+            //           .ToCollection()
+            //           .Do(col => Console.WriteLine($"New collection: {col.Count}"))
+            //           .DistinctByDispatcher(DispatcherPriority.Loaded)
+            //           .Select(ProcessListToTransitions)
+            //           .Do(ApplyTransitions)
+            //           .Subscribe(_ => _animate = false);
 
             _dataViewModel.Heights.WhenAnyValue(x => x.ListOffset)
-                          .Subscribe(OnScroll);
+                           .Subscribe(OnScroll);
+        }
+
+        private bool AreThereChangesInsideOfRange(IChangeSet<ILogItem> Changes)
+        {
+            bool IsInRange(int Index)
+            {
+                return Index >= _pagingRequest.StartIndex &&
+                       Index < _pagingRequest.StartIndex + _pagingRequest.Size;
+            }
+
+            var itemChanges = Changes.Flatten().ToList();
+            var changesWhithin = itemChanges.Where(ch => IsInRange(ch.CurrentIndex) || IsInRange(ch.PreviousIndex)).ToList();
+            return changesWhithin.Any();
+        }
+
+        private void Rescroll()
+        {
+            var newIndexes = new Dictionary<ILogItem, int>();
+
+            if (_visibleItems.Any())
+            {
+                var topIndex    = 0;
+                var bottomIndex = _collection.Count - 1;
+
+                foreach (var t in _visibleItems)
+                {
+                    var index = _collection.BinarySearch(t, 0, bottomIndex);
+                    if (index != -1)
+                    {
+                        topIndex = index;
+                        break;
+                    }
+                }
+
+                for (var i = _visibleItems.Count - 1; i >= 0; i--)
+                {
+                    var idx                    = _collection.BinarySearch(_visibleItems[i], topIndex, bottomIndex);
+                    if (idx != -1) bottomIndex = idx;
+                    newIndexes.Add(_visibleItems[i], idx);
+                }
+
+                var shift = _visibleItems.Select((item, i) => new { old = i, @new = newIndexes[item] })
+                                         .Where(x => x.@new != -1)
+                                         .Select(x => _dataViewModel.Heights.OffsetFromIndex(x.@new) -
+                                                      _dataViewModel.Heights.OffsetFromIndex(x.old))
+                                         .Average();
+
+                _dataViewModel.Heights.ListOffset = shift;
+            }
         }
 
         private IList<ItemTransition> ProcessListToTransitions(IReadOnlyCollection<ILogItem> NewItems)
@@ -179,15 +266,21 @@ namespace LogList.Control
                 bottom[i] = new ItemTransition(bottom[i].Item)
                     { From = bottom[i].From, To = _pagingRequest.Size + i, RemoveAfterMove = true };
 
-            return new[] { top, middle, bottom, @new }.SelectMany(x => x).ToList();
+
+            var transitions = new[] { top, middle, bottom, @new }.SelectMany(x => x).ToList();
+            Console.WriteLine($"Prepared {transitions.GetHashCode():x}");
+
+            return transitions;
         }
 
-        private void ApplyTransactions(IList<ItemTransition> Transactions)
+        private void ApplyTransitions(IList<ItemTransition> Transitions)
         {
-            foreach (var newItem in Transactions.Where(t => t.New))
+            Console.WriteLine($"Rendered {Transitions.GetHashCode():x} (Animations: {_animate})");
+
+            foreach (var newItem in Transitions.Where(t => t.New))
                 CreateItem(newItem.Item, newItem.To);
 
-            foreach (var itemTransition in Transactions)
+            foreach (var itemTransition in Transitions)
                 if (itemTransition.Inserted)
                     FadeInItem(itemTransition.Item);
                 else if (itemTransition.Deleted)
@@ -196,10 +289,10 @@ namespace LogList.Control
                     MoveItem(itemTransition.Item, itemTransition.From, itemTransition.To,
                              itemTransition.RemoveAfterMove);
 
-            _visibleItems = Transactions.Where(t => !t.Deleted && !t.RemoveAfterMove)
-                                        .OrderBy(t => t.To)
-                                        .Select(t => t.Item)
-                                        .ToList();
+            _visibleItems = Transitions.Where(t => !t.Deleted && !t.RemoveAfterMove)
+                                       .OrderBy(t => t.To)
+                                       .Select(t => t.Item)
+                                       .ToList();
         }
 
         private void OnScroll(double Offset)
@@ -284,8 +377,8 @@ namespace LogList.Control
                     RemoveItem(Item, true);
             }
         }
-        
-        private void RemoveItem(ILogItem Item, Boolean RemoveFromVisualTree)
+
+        private void RemoveItem(ILogItem Item, bool RemoveFromVisualTree)
         {
             var container = _containers[Item];
             _containers.Remove(Item);
@@ -312,7 +405,7 @@ namespace LogList.Control
         {
             if (_containers.ContainsKey(Item))
                 return;
-            
+
             var yPosition = _dataViewModel.Heights.RelativeOffsetFromIndex(Index);
 
             var presenter = new ContentPresenter

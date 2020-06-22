@@ -13,7 +13,6 @@ namespace LogList.Demo.ViewModels
     public class MainViewModel : ReactiveObject
     {
         private string _filter;
-        private int _id;
 
         public MainViewModel()
         {
@@ -35,20 +34,25 @@ namespace LogList.Demo.ViewModels
             Items = items;
 
             var sources = 2;
-            var inserter = Observable.Interval(TimeSpan.FromMilliseconds(3000))
+            var inserter = Observable.Interval(TimeSpan.FromMilliseconds(10))
                                      .ObserveOn(TaskPoolScheduler.Default)
-                                     .Do(_ => itemsSource.Add(
-                                             new MyLogItem(Interlocked.Increment(ref _id), DateTime.Now,
-                                                           r.Next(sources))));
+                                     .Select(_ => new MyLogItem(Interlocked.Increment(ref _id),
+                                                                DateTime.Now.AddDays(100),
+                                                                r.Next(sources)))
+                                     //.Do(x => Console.WriteLine(x))
+                                     .Do(i => itemsSource.Add(i));
 
-            var demoData = Enumerable.Range(0, 100)
+            var demoData = Enumerable.Range(0, 20)
                                      .Select(i => new MyLogItem(Interlocked.Increment(ref _id),
                                                                 DateTime.Now.AddMinutes(i),
                                                                 r.Next(sources)));
 
-            inserter.Subscribe();
             itemsSource.AddRange(demoData);
+            
+            inserter.Subscribe();
         }
+
+        private int _id;
 
         public ReadOnlyObservableCollection<ILogItem> Items { get; set; }
 
