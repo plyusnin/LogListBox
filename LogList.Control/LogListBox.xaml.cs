@@ -17,12 +17,12 @@ namespace LogList.Control
 {
     public partial class LogListBox : UserControl
     {
-        private bool _animate;
         private ReadOnlyObservableCollection<ILogItem> _collection;
         private IListDataViewModel _dataViewModel;
-
-
+        
+        private bool _animate;
         private VirtualRequest _pagingRequest;
+        private (ILogItem Item, double Offset) _viewingPosition;
 
         private List<ILogItem> _visibleItems = new List<ILogItem>();
 
@@ -67,35 +67,47 @@ namespace LogList.Control
                .Subscribe(r => _pagingRequest = r);
 
             collectionChanges.Do(changes => _animate |= AreThereChangesInsideOfRange(changes))
+                             .Do(changes => ScrollIfNeeded(changes))
                              .Virtualise(pagingRequests)
                              .ToCollection()
                              .DistinctByDispatcher(DispatcherPriority.Loaded)
                              .Synchronize(locker)
                              .Select(ProcessListToTransitions)
                              .Do(ApplyTransitions)
+                              //.Do(_ => _viewingPosition = GetViewingPosition())
                              .Subscribe(_ => _animate = false);
 
-            // Collection.ToObservableChangeSet()
-            //            //.Buffer(TimeSpan.FromMilliseconds(100))
-            //            //.Where(l => l.Count > 0)
-            //           .ObserveOnDispatcher()
-            //            //.Do(l => Console.WriteLine(l.Count))
-            //            //.SelectMany(l => l)
-            //           .Sort(SortExpressionComparer<ILogItem>.Ascending(x => x.Time),
-            //                 SortOptions.UseBinarySearch)
-            //           .Bind(out _collection)
-            //            //           //.Do(_ => Rescroll())
-            //           .Do(changes => _animate = AreThereChangesInsideOfRange(changes))
-            //           .Virtualise(pagingRequests)
-            //           .ToCollection()
-            //           .Do(col => Console.WriteLine($"New collection: {col.Count}"))
-            //           .DistinctByDispatcher(DispatcherPriority.Loaded)
-            //           .Select(ProcessListToTransitions)
-            //           .Do(ApplyTransitions)
-            //           .Subscribe(_ => _animate = false);
-
             _dataViewModel.Heights.WhenAnyValue(x => x.ListOffset)
-                           .Subscribe(OnScroll);
+                          .Do(_ => _viewingPosition = GetViewingPosition())
+                          .Subscribe();
+            _dataViewModel.Heights.WhenAnyValue(x => x.ListOffset)
+                          .Subscribe(OnScroll);
+        }
+
+        private void ScrollIfNeeded(IChangeSet<ILogItem> Changes)
+        {
+            if (_viewingPosition.Item == null || _collection.Count == 0)
+                return;
+
+            var index = _collection.BinarySearch(_viewingPosition.Item,
+                                                 BinarySearchExtensions.ItemNotFoundBehavior.ReturnClosestTimeIndex);
+            if (index < 0) return;
+
+            var itemAbsoluteOffset = _dataViewModel.Heights.OffsetFromIndex(index);
+            var offset             = itemAbsoluteOffset - _viewingPosition.Offset;
+
+            _dataViewModel.Heights.ListOffset = offset;
+        }
+
+        private (ILogItem Item, double Offset) GetViewingPosition()
+        {
+            if (_visibleItems.Count == 0)
+                return (null, 0);
+
+            var index = _visibleItems.Count / 2;
+            var res   = (_visibleItems[index], _dataViewModel.Heights.RelativeOffsetFromIndex(index));
+
+            return res;
         }
 
         private bool AreThereChangesInsideOfRange(IChangeSet<ILogItem> Changes)
@@ -106,45 +118,7 @@ namespace LogList.Control
                        Index < _pagingRequest.StartIndex + _pagingRequest.Size;
             }
 
-            var itemChanges = Changes.Flatten().ToList();
-            var changesWhithin = itemChanges.Where(ch => IsInRange(ch.CurrentIndex) || IsInRange(ch.PreviousIndex)).ToList();
-            return changesWhithin.Any();
-        }
-
-        private void Rescroll()
-        {
-            var newIndexes = new Dictionary<ILogItem, int>();
-
-            if (_visibleItems.Any())
-            {
-                var topIndex    = 0;
-                var bottomIndex = _collection.Count - 1;
-
-                foreach (var t in _visibleItems)
-                {
-                    var index = _collection.BinarySearch(t, 0, bottomIndex);
-                    if (index != -1)
-                    {
-                        topIndex = index;
-                        break;
-                    }
-                }
-
-                for (var i = _visibleItems.Count - 1; i >= 0; i--)
-                {
-                    var idx                    = _collection.BinarySearch(_visibleItems[i], topIndex, bottomIndex);
-                    if (idx != -1) bottomIndex = idx;
-                    newIndexes.Add(_visibleItems[i], idx);
-                }
-
-                var shift = _visibleItems.Select((item, i) => new { old = i, @new = newIndexes[item] })
-                                         .Where(x => x.@new != -1)
-                                         .Select(x => _dataViewModel.Heights.OffsetFromIndex(x.@new) -
-                                                      _dataViewModel.Heights.OffsetFromIndex(x.old))
-                                         .Average();
-
-                _dataViewModel.Heights.ListOffset = shift;
-            }
+            return Changes.Flatten().ToList().Any(ch => IsInRange(ch.CurrentIndex) || IsInRange(ch.PreviousIndex));
         }
 
         private IList<ItemTransition> ProcessListToTransitions(IReadOnlyCollection<ILogItem> NewItems)
@@ -351,14 +325,14 @@ namespace LogList.Control
         private void MoveItem(ILogItem Item, int From, int To, bool RemoveAfterMove)
         {
             var container = _containers[Item];
-            container.SetValue(Canvas.TopProperty, _dataViewModel.Heights.OffsetFromIndex(To));
+            container.SetValue(Canvas.TopProperty, _dataViewModel.Heights.RelativeOffsetFromIndex(To));
 
             if (_animate)
             {
                 var easingFunction = new PowerEase { EasingMode = EasingMode.EaseInOut };
                 var animation = new DoubleAnimation
                 {
-                    From           = _dataViewModel.Heights.OffsetFromIndex(From),
+                    From           = _dataViewModel.Heights.RelativeOffsetFromIndex(From),
                     Duration       = TimeSpan.FromMilliseconds(300),
                     EasingFunction = easingFunction,
                     IsAdditive     = true
@@ -454,7 +428,6 @@ namespace LogList.Control
             "ItemsSource", typeof(ReadOnlyObservableCollection<ILogItem>), typeof(LogListBox),
             new PropertyMetadata(null,
                                  ItemsSourceChangedCallback));
-
 
         private readonly Dictionary<ILogItem, ContentPresenter> _containers =
             new Dictionary<ILogItem, ContentPresenter>();

@@ -42,14 +42,14 @@ namespace LogList.Demo.ViewModels
                                      //.Do(x => Console.WriteLine(x))
                                      .Do(i => itemsSource.Add(i));
 
-            var demoData = Enumerable.Range(0, 20)
+            var demoData = Enumerable.Range(0, 2000)
                                      .Select(i => new MyLogItem(Interlocked.Increment(ref _id),
                                                                 DateTime.Now.AddMinutes(i),
                                                                 r.Next(sources)));
 
             itemsSource.AddRange(demoData);
             
-            inserter.Subscribe();
+            //inserter.Subscribe();
         }
 
         private int _id;
