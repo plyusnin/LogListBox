@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
@@ -19,9 +20,12 @@ namespace LogList.Demo.ViewModels
         private string _filter;
 
         private int _id;
+        private readonly string[] _poem;
 
         public MainViewModel()
         {
+            _poem = File.ReadAllLines("poem.txt");
+
             var r           = new Random();
             var itemsSource = new SourceList<MyLogItem>();
 
@@ -29,7 +33,7 @@ namespace LogList.Demo.ViewModels
                              .Select(ft => ft?.Trim())
                              .Select(rq => string.IsNullOrWhiteSpace(rq)
                                          ? (Func<MyLogItem, bool>) (i => true)
-                                         : (Func<MyLogItem, bool>) (i => i.ToString().Contains(rq)));
+                                         : (Func<MyLogItem, bool>) (i => i.ToString().Contains(rq) || i.Text.ToLower().Contains(rq)));
 
             itemsSource.Connect()
                        .Filter(filter)
@@ -42,19 +46,15 @@ namespace LogList.Demo.ViewModels
             var sources = 2;
             var inserter = Observable.Interval(TimeSpan.FromMilliseconds(150))
                                      .ObserveOn(TaskPoolScheduler.Default)
-                                     .Select(_ => new MyLogItem(Interlocked.Increment(ref _id),
-                                                                DateTime.Now.AddDays(20),
-                                                                r.Next(sources)))
-                                     //.Do(x => Console.WriteLine(x))
+                                     .Select(_ => GetMyLogItem(r, sources))
+                                      //.Do(x => Console.WriteLine(x))
                                      .Do(i => itemsSource.Add(i));
 
             var demoData = Enumerable.Range(0, 40)
-                                     .Select(i => new MyLogItem(Interlocked.Increment(ref _id),
-                                                                DateTime.Now.AddMinutes(i),
-                                                                r.Next(sources)));
+                                     .Select(i => GetMyLogItem(r, sources));
 
             itemsSource.AddRange(demoData);
-            
+
             inserter.Subscribe(_itemAddedSubject);
         }
 
@@ -72,6 +72,15 @@ namespace LogList.Demo.ViewModels
         {
             get => _autoScroll;
             set => this.RaiseAndSetIfChanged(ref _autoScroll, value);
+        }
+
+        private MyLogItem GetMyLogItem(Random r, int sources)
+        {
+            var id = Interlocked.Increment(ref _id);
+            return new MyLogItem(id,
+                                 DateTime.Now.AddDays(20),
+                                 r.Next(sources),
+                                 _poem[id % _poem.Length]);
         }
     }
 }

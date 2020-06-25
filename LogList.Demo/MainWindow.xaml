@@ -16,7 +16,25 @@
             <CheckBox Margin="2" IsChecked="{Binding AutoScroll}" Content="Auto Scroll" VerticalAlignment="Center" />
         </StackPanel>
 
-        <control:LogListBox Margin="4" x:Name="ListBox" ItemsSource="{Binding Items}" />
+        <control:LogListBox Margin="4" x:Name="ListBox" ItemsSource="{Binding Items}"
+                            FontFamily="Consolas">
+            <control:LogListBox.ItemTemplate>
+                <DataTemplate DataType="viewModels:MyLogItem">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150" />
+                            <ColumnDefinition Width="40" />
+                            <ColumnDefinition Width="90" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding Time}" />
+                        <TextBlock Grid.Column="1" Text="{Binding Id}" FontWeight="SemiBold" TextAlignment="Right" Margin="4,0" />
+                        <TextBlock Grid.Column="2" Text="{Binding SourceNumber, StringFormat='Source = {0}'}" />
+                        <TextBlock Grid.Column="3" Text="{Binding Text}" FontStyle="Italic" />
+                    </Grid>
+                </DataTemplate>
+            </control:LogListBox.ItemTemplate>
+        </control:LogListBox>
 
     </DockPanel>
 </Window>

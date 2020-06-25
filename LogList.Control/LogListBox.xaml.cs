@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reactive.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
@@ -128,8 +129,6 @@ namespace LogList.Control
 
         private IList<ItemTransition> ProcessListToTransitions(IReadOnlyCollection<ILogItem> NewItems)
         {
-            Console.WriteLine($"Generate list for {_pagingRequest.StartIndex} - {_pagingRequest.StartIndex + _pagingRequest.Size}");
-            
             var top    = new List<ItemTransition>();
             var middle = new List<ItemTransition>();
             var bottom = new List<ItemTransition>();
@@ -384,6 +383,8 @@ namespace LogList.Control
             };
             presenter.SetValue(Canvas.LeftProperty, 0.0);
             presenter.SetValue(Canvas.TopProperty,  yPosition);
+            
+            presenter.SetBinding(ContentPresenter.ContentTemplateProperty, new Binding(nameof(ItemTemplate)) { Source = this});
 
             _containers.Add(Item, presenter);
             HostCanvas.Children.Add(presenter);
@@ -440,6 +441,15 @@ namespace LogList.Control
             set => SetValue(ItemsSourceProperty, value);
         }
 
+        public static readonly DependencyProperty ItemTemplateProperty = DependencyProperty.Register(
+            "ItemTemplate", typeof(DataTemplate), typeof(LogListBox), new PropertyMetadata(default(DataTemplate)));
+
+        public DataTemplate ItemTemplate
+        {
+            get => (DataTemplate) GetValue(ItemTemplateProperty);
+            set => SetValue(ItemTemplateProperty, value);
+        }
+        
         #endregion
     }
 }

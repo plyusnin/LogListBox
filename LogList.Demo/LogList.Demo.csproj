@@ -15,4 +15,11 @@
       <PackageReference Include="ReactiveUI.WPF" Version="11.4.17" />
     </ItemGroup>
 
+    <ItemGroup>
+      <None Remove="Poem.txt" />
+      <Content Include="Poem.txt">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </Content>
+    </ItemGroup>
+
 </Project>
