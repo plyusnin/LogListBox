@@ -20,7 +20,7 @@ namespace LogList.Control
     {
         private bool _animate;
         private bool _autoscroll = true;
-        
+
         private ReadOnlyObservableCollection<ILogItem> _collection;
         private IListDataViewModel _dataViewModel;
         private VirtualRequest _pagingRequest;
@@ -42,11 +42,11 @@ namespace LogList.Control
             var locker = new object();
 
             Collection.ToObservableChangeSet()
-                      // .Buffer(TimeSpan.FromMilliseconds(100))
-                      // .Where(l => l.Count > 0)
+                       // .Buffer(TimeSpan.FromMilliseconds(100))
+                       // .Where(l => l.Count > 0)
                       .ObserveOnDispatcher()
                       .Synchronize(locker)
-                      // .SelectMany(l => l)
+                       // .SelectMany(l => l)
                       .Sort(SortExpressionComparer<ILogItem>.Ascending(x => x.Time),
                             SortOptions.UseBinarySearch)
                       .Bind(out _collection)
@@ -57,8 +57,8 @@ namespace LogList.Control
 
             var viewModel = new ListViewModel(collectionChanges.Count());
 
-            DataContext                           = viewModel;
             _dataViewModel                        = viewModel;
+            Heights                               = viewModel.Heights;
             _dataViewModel.Heights.ViewportHeight = HostCanvas.ActualHeight;
 
             var pagingRequests = viewModel.Heights.PagingRequests;
@@ -78,7 +78,7 @@ namespace LogList.Control
                               //.Do(_ => _viewingPosition = GetViewingPosition())
                              .Subscribe(_ =>
                               {
-                                  _animate = false;
+                                  _animate    = false;
                                   _autoscroll = true;
                               });
 
@@ -262,7 +262,7 @@ namespace LogList.Control
         public void ScrollIntoView(ILogItem Item, double ScrollingMargin = 25)
         {
             VerifyAccess();
-            
+
             var scrollIndex =
                 _collection.BinarySearch(Item, BinarySearchExtensions.ItemNotFoundBehavior.ReturnClosestTimeIndex);
 
@@ -271,12 +271,12 @@ namespace LogList.Control
             var viewportHeight = _dataViewModel.Heights.ViewportHeight;
 
             if (itemOffset < listOffset + ScrollingMargin)
-                _dataViewModel.Heights.ListOffset = itemOffset - ScrollingMargin;
+                _dataViewModel.Heights.ListOffset = itemOffset                  - ScrollingMargin;
             else if (itemOffset > listOffset                                    + viewportHeight - ScrollingMargin)
                 _dataViewModel.Heights.ListOffset = itemOffset - viewportHeight + ScrollingMargin;
-            
+
             _autoscroll = false;
-            _animate = false;
+            _animate    = false;
         }
 
         #region WPF Events
@@ -377,14 +377,16 @@ namespace LogList.Control
 
             var presenter = new ContentPresenter
             {
-                Content = Item,
-                Height  = _dataViewModel.Heights.ItemHeight,
-                Width   = Width
+                Content             = Item,
+                Height              = _dataViewModel.Heights.ItemHeight,
+                Width               = Width,
+                HorizontalAlignment = HorizontalAlignment.Stretch
             };
             presenter.SetValue(Canvas.LeftProperty, 0.0);
             presenter.SetValue(Canvas.TopProperty,  yPosition);
-            
-            presenter.SetBinding(ContentPresenter.ContentTemplateProperty, new Binding(nameof(ItemTemplate)) { Source = this});
+
+            presenter.SetBinding(ContentPresenter.ContentTemplateProperty,
+                                 new Binding(nameof(ItemTemplate)) { Source = this });
 
             _containers.Add(Item, presenter);
             HostCanvas.Children.Add(presenter);
@@ -435,9 +437,9 @@ namespace LogList.Control
             control.Attach(data);
         }
 
-        public IListDataViewModel ItemsSource
+        public ReadOnlyObservableCollection<ILogItem> ItemsSource
         {
-            get => (IListDataViewModel) GetValue(ItemsSourceProperty);
+            get => (ReadOnlyObservableCollection<ILogItem>) GetValue(ItemsSourceProperty);
             set => SetValue(ItemsSourceProperty, value);
         }
 
@@ -449,7 +451,17 @@ namespace LogList.Control
             get => (DataTemplate) GetValue(ItemTemplateProperty);
             set => SetValue(ItemTemplateProperty, value);
         }
-        
+
+        public static readonly DependencyProperty HeightsProperty = DependencyProperty.Register(
+            "Heights", typeof(HeightViewModel), typeof(LogListBox),
+            new PropertyMetadata(new HeightViewModel(Observable.Return(0))));
+
+        public HeightViewModel Heights
+        {
+            get => (HeightViewModel) GetValue(HeightsProperty);
+            set => SetValue(HeightsProperty, value);
+        }
+
         #endregion
     }
 }

@@ -15,11 +15,11 @@
             </Grid.ColumnDefinitions>
             <Canvas x:Name="HostCanvas" Grid.Column="0" ClipToBounds="True" />
             <ScrollBar Grid.Column="1"
-                       Maximum="{Binding Path=Heights.ScrollableMaximum}"
-                       Value="{Binding Path=Heights.ListOffset}"
-                       ViewportSize="{Binding Path=Heights.ViewportHeight}"
-                       SmallChange="{Binding Path=Heights.SmallChange}"
-                       LargeChange="{Binding Path=Heights.ViewportHeight}" />
+                       Maximum="{Binding ElementName=Root, Path=Heights.ScrollableMaximum}"
+                       Value="{Binding ElementName=Root, Path=Heights.ListOffset}"
+                       ViewportSize="{Binding ElementName=Root, Path=Heights.ViewportHeight}"
+                       SmallChange="{Binding ElementName=Root, Path=Heights.SmallChange}"
+                       LargeChange="{Binding ElementName=Root, Path=Heights.ViewportHeight}" />
         </Grid>
     </Border>
 </UserControl>
