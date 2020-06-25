@@ -13,9 +13,10 @@
             <TextBlock Margin="2" Text="Filter:" />
             <TextBox Margin="2" Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}"
                      Padding="4,2" Width="170" />
+            <CheckBox Margin="2" IsChecked="{Binding AutoScroll}" Content="Auto Scroll" VerticalAlignment="Center" />
         </StackPanel>
 
-        <control:LogListBox Margin="4" ItemsSource="{Binding Items}" />
+        <control:LogListBox Margin="4" x:Name="ListBox" ItemsSource="{Binding Items}" />
 
     </DockPanel>
 </Window>

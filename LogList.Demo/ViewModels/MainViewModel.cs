@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using System.Threading;
 using DynamicData;
 using LogList.Control;
@@ -12,7 +13,12 @@ namespace LogList.Demo.ViewModels
 {
     public class MainViewModel : ReactiveObject
     {
+        private readonly Subject<MyLogItem> _itemAddedSubject = new Subject<MyLogItem>();
+
+        private bool _autoScroll;
         private string _filter;
+
+        private int _id;
 
         public MainViewModel()
         {
@@ -34,32 +40,38 @@ namespace LogList.Demo.ViewModels
             Items = items;
 
             var sources = 2;
-            var inserter = Observable.Interval(TimeSpan.FromMilliseconds(10))
+            var inserter = Observable.Interval(TimeSpan.FromMilliseconds(150))
                                      .ObserveOn(TaskPoolScheduler.Default)
                                      .Select(_ => new MyLogItem(Interlocked.Increment(ref _id),
-                                                                DateTime.Now.AddDays(100),
+                                                                DateTime.Now.AddDays(20),
                                                                 r.Next(sources)))
                                      //.Do(x => Console.WriteLine(x))
                                      .Do(i => itemsSource.Add(i));
 
-            var demoData = Enumerable.Range(0, 2000)
+            var demoData = Enumerable.Range(0, 40)
                                      .Select(i => new MyLogItem(Interlocked.Increment(ref _id),
                                                                 DateTime.Now.AddMinutes(i),
                                                                 r.Next(sources)));
 
             itemsSource.AddRange(demoData);
             
-            //inserter.Subscribe();
+            inserter.Subscribe(_itemAddedSubject);
         }
 
-        private int _id;
-
         public ReadOnlyObservableCollection<ILogItem> Items { get; set; }
+
+        public IObservable<ILogItem> ItemAdded => _itemAddedSubject;
 
         public string Filter
         {
             get => _filter;
             set => this.RaiseAndSetIfChanged(ref _filter, value);
+        }
+
+        public bool AutoScroll
+        {
+            get => _autoScroll;
+            set => this.RaiseAndSetIfChanged(ref _autoScroll, value);
         }
     }
 }

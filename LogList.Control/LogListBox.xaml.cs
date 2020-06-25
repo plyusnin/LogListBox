@@ -17,10 +17,11 @@ namespace LogList.Control
 {
     public partial class LogListBox : UserControl
     {
+        private bool _animate;
+        private bool _autoscroll = true;
+        
         private ReadOnlyObservableCollection<ILogItem> _collection;
         private IListDataViewModel _dataViewModel;
-        
-        private bool _animate;
         private VirtualRequest _pagingRequest;
         private (ILogItem Item, double Offset) _viewingPosition;
 
@@ -40,11 +41,11 @@ namespace LogList.Control
             var locker = new object();
 
             Collection.ToObservableChangeSet()
-                      .Buffer(TimeSpan.FromMilliseconds(100))
-                      .Where(l => l.Count > 0)
+                      // .Buffer(TimeSpan.FromMilliseconds(100))
+                      // .Where(l => l.Count > 0)
                       .ObserveOnDispatcher()
                       .Synchronize(locker)
-                      .SelectMany(l => l)
+                      // .SelectMany(l => l)
                       .Sort(SortExpressionComparer<ILogItem>.Ascending(x => x.Time),
                             SortOptions.UseBinarySearch)
                       .Bind(out _collection)
@@ -74,19 +75,23 @@ namespace LogList.Control
                              .Select(ProcessListToTransitions)
                              .Do(ApplyTransitions)
                               //.Do(_ => _viewingPosition = GetViewingPosition())
-                             .Subscribe(_ => _animate = false);
+                             .Subscribe(_ =>
+                              {
+                                  _animate = false;
+                                  _autoscroll = true;
+                              });
 
             _dataViewModel.Heights.WhenAnyValue(x => x.ListOffset)
                           .Do(_ => _viewingPosition = GetViewingPosition())
                           .Subscribe();
-            
+
             _dataViewModel.Heights.WhenAnyValue(x => x.ListOffset)
                           .Subscribe(OnScroll);
         }
 
         private void ScrollIfNeeded(IChangeSet<ILogItem> Changes)
         {
-            if (_viewingPosition.Item == null || _collection.Count == 0)
+            if (_viewingPosition.Item == null || _collection.Count == 0 || !_autoscroll)
                 return;
 
             var index = _collection.BinarySearch(_viewingPosition.Item,
@@ -123,6 +128,8 @@ namespace LogList.Control
 
         private IList<ItemTransition> ProcessListToTransitions(IReadOnlyCollection<ILogItem> NewItems)
         {
+            Console.WriteLine($"Generate list for {_pagingRequest.StartIndex} - {_pagingRequest.StartIndex + _pagingRequest.Size}");
+            
             var top    = new List<ItemTransition>();
             var middle = new List<ItemTransition>();
             var bottom = new List<ItemTransition>();
@@ -251,6 +258,26 @@ namespace LogList.Control
             base.OnRenderSizeChanged(sizeInfo);
             if (sizeInfo.HeightChanged && _dataViewModel != null)
                 _dataViewModel.Heights.ViewportHeight = HostCanvas.ActualHeight;
+        }
+
+        public void ScrollIntoView(ILogItem Item, double ScrollingMargin = 25)
+        {
+            VerifyAccess();
+            
+            var scrollIndex =
+                _collection.BinarySearch(Item, BinarySearchExtensions.ItemNotFoundBehavior.ReturnClosestTimeIndex);
+
+            var itemOffset     = _dataViewModel.Heights.OffsetFromIndex(scrollIndex);
+            var listOffset     = _dataViewModel.Heights.ListOffset;
+            var viewportHeight = _dataViewModel.Heights.ViewportHeight;
+
+            if (itemOffset < listOffset + ScrollingMargin)
+                _dataViewModel.Heights.ListOffset = itemOffset - ScrollingMargin;
+            else if (itemOffset > listOffset                                    + viewportHeight - ScrollingMargin)
+                _dataViewModel.Heights.ListOffset = itemOffset - viewportHeight + ScrollingMargin;
+            
+            _autoscroll = false;
+            _animate = false;
         }
 
         #region WPF Events
