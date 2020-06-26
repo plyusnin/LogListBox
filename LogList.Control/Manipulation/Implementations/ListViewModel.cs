@@ -162,7 +162,14 @@ namespace LogList.Control.Manipulation.Implementations
 
             public void Clear()
             {
-                throw new NotImplementedException();
+                _parent._original.Clear();
+                _parent._filtered.Clear();
+                
+                _parent._original.TrimExcess();
+                _parent._filtered.TrimExcess();
+                
+                WindowAfterEdit = new ViewWindow(0, WindowAfterEdit.Size);
+                ViewChanged = true;
             }
         }
     }
