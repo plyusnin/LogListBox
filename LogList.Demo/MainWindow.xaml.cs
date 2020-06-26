@@ -15,11 +15,6 @@ namespace LogList.Demo
             InitializeComponent();
 
             var viewModel = new MainViewModel();
-            viewModel.ItemAdded
-                     .ObserveOnDispatcher()
-                     .CombineLatest(viewModel.WhenAnyValue(x => x.AutoScroll), (Item, AutoScroll) => new { Item, AutoScroll })
-                     .Where(x => x.AutoScroll)
-                     .Subscribe(x => ListBox.ScrollIntoView(x.Item));
             DataContext = viewModel;
         }
     }

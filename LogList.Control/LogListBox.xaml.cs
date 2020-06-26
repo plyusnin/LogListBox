@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive.Linq;
 using System.Windows;
@@ -9,21 +8,13 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
-using DynamicData;
-using DynamicData.Aggregation;
-using DynamicData.Binding;
+using LogList.Control.Manipulation.Implementations;
 using ReactiveUI;
 
 namespace LogList.Control
 {
     public partial class LogListBox : UserControl
     {
-        private bool _animate;
-        private bool _autoscroll = true;
-
-        private ReadOnlyObservableCollection<ILogItem> _collection;
-        private IListDataViewModel _dataViewModel;
-        private VirtualRequest _pagingRequest;
         private (ILogItem Item, double Offset) _viewingPosition;
 
         private List<ILogItem> _visibleItems = new List<ILogItem>();
@@ -34,103 +25,38 @@ namespace LogList.Control
             InitializeComponent();
         }
 
-        private void Attach(ReadOnlyObservableCollection<ILogItem> Collection)
+        private void Attach(ILogViewSource ViewSource)
         {
-            if (Collection == null)
+            _viewSourceSubscription?.Dispose();
+
+            if (ViewSource == null)
                 return;
 
             var locker = new object();
 
-            Collection.ToObservableChangeSet()
-                       // .Buffer(TimeSpan.FromMilliseconds(100))
-                       // .Where(l => l.Count > 0)
-                      .ObserveOnDispatcher()
-                      .Synchronize(locker)
-                       // .SelectMany(l => l)
-                      .Sort(SortExpressionComparer<ILogItem>.Ascending(x => x.Time),
-                            SortOptions.UseBinarySearch)
-                      .Bind(out _collection)
-                      .Subscribe();
-
-            var collectionChanges = _collection.ToObservableChangeSet()
-                                               .Synchronize(locker);
-
-
-            Heights = new HeightViewModel(collectionChanges.Count())
+            Scroller = new ScrollerViewModel(ViewSource.FilteredSetSize, ViewSource.PresentationRequests)
             {
                 ViewportHeight = HostCanvas.ActualHeight
             };
-            
-            var viewModel = new ListViewModel(collectionChanges.Count());
-            _dataViewModel = viewModel;
 
-            var pagingRequests = Heights.PagingRequests;
+            _viewSourceSubscription = Scroller.Requests
+                                              .DistinctUntilChanged(r => r.Window)
+                                              .DistinctByDispatcher(DispatcherPriority.Loaded)
+                                              .Synchronize(locker)
+                                              .Select(r => new LogView(
+                                                          r.Window,
+                                                          ViewSource.Present(r.Window),
+                                                          r.AnimateTransitions))
+                                              .Select(ProcessListToTransitions)
+                                              .Do(x => ApplyTransitions(x.Transitions, x.Animate))
+                                              .Subscribe();
 
-            pagingRequests
-               .Synchronize(locker)
-               .Subscribe(r => _pagingRequest = r);
-
-            collectionChanges.Do(changes => _animate |= AreThereChangesInsideOfRange(changes))
-                             .Do(ScrollIfNeeded)
-                             .Virtualise(pagingRequests)
-                             .ToCollection()
-                             .DistinctByDispatcher(DispatcherPriority.Loaded)
-                             .Synchronize(locker)
-                             .Select(ProcessListToTransitions)
-                             .Do(ApplyTransitions)
-                              //.Do(_ => _viewingPosition = GetViewingPosition())
-                             .Subscribe(_ =>
-                              {
-                                  _animate    = false;
-                                  _autoscroll = true;
-                              });
-
-            Heights.WhenAnyValue(x => x.ListOffset)
-                          .Do(_ => _viewingPosition = GetViewingPosition())
-                          .Subscribe();
-
-            Heights.WhenAnyValue(x => x.ListOffset)
-                          .Subscribe(OnScroll);
+            Scroller.WhenAnyValue(x => x.ListOffset)
+                    .Synchronize(locker)
+                    .Subscribe(OnScroll);
         }
 
-        private void ScrollIfNeeded(IChangeSet<ILogItem> Changes)
-        {
-            if (_viewingPosition.Item == null || _collection.Count == 0 || !_autoscroll)
-                return;
-
-            var index = _collection.BinarySearch(_viewingPosition.Item,
-                                                 BinarySearchExtensions.ItemNotFoundBehavior.ReturnClosestTimeIndex);
-            if (index < 0) return;
-
-            var itemAbsoluteOffset = Heights.OffsetFromIndex(index);
-            var offset             = itemAbsoluteOffset - _viewingPosition.Offset;
-
-            Heights.ListOffset = offset;
-        }
-
-        private (ILogItem Item, double Offset) GetViewingPosition()
-        {
-            if (_visibleItems.Count == 0)
-                return (null, 0);
-
-            var index = _visibleItems.Count / 2;
-            var res   = (_visibleItems[index], Heights.RelativeOffsetFromIndex(index));
-
-            return res;
-        }
-
-        private bool AreThereChangesInsideOfRange(IChangeSet<ILogItem> Changes)
-        {
-            bool IsInRange(int Index)
-            {
-                return Index >= _pagingRequest.StartIndex &&
-                       Index < _pagingRequest.StartIndex + _pagingRequest.Size;
-            }
-
-            return Changes.Flatten().ToList().Any(ch => IsInRange(ch.CurrentIndex) || IsInRange(ch.PreviousIndex));
-        }
-
-        private IList<ItemTransition> ProcessListToTransitions(IReadOnlyCollection<ILogItem> NewItems)
+        private (List<ItemTransition> Transitions, bool Animate) ProcessListToTransitions(ILogView NewView)
         {
             var top    = new List<ItemTransition>();
             var middle = new List<ItemTransition>();
@@ -138,15 +64,15 @@ namespace LogList.Control
 
             var stage = 0;
 
-            var allNew = NewItems.Select((item, index) =>
-                                             new
-                                             {
-                                                 item,
-                                                 index,
-                                                 isNew = !_visibleItems.Contains(item)
-                                             })
-                                 .Where(x => x.isNew)
-                                 .ToList();
+            var allNew = NewView.VisibleItems.Select((item, index) =>
+                                                         new
+                                                         {
+                                                             item,
+                                                             index,
+                                                             isNew = !_visibleItems.Contains(item)
+                                                         })
+                                .Where(x => x.isNew)
+                                .ToList();
 
             List<ItemTransition> @new;
             if (_visibleItems.Any())
@@ -160,7 +86,7 @@ namespace LogList.Control
                 var bottomNew        = allNew.Where(x => x.item.Time > oldMotBottomTime).ToList();
                 var bottomNewTransitions = bottomNew.Select((item, index) => new ItemTransition(item.item)
                 {
-                    To = item.index, From = _pagingRequest.Size + index, New = true
+                    To = item.index, From = NewView.Window.Size + index, New = true
                 });
 
                 var middleNewTransitions = allNew
@@ -179,7 +105,7 @@ namespace LogList.Control
             for (var i = 0; i < _visibleItems.Count; i++)
             {
                 var item     = _visibleItems[i];
-                var newIndex = NewItems.IndexOf(item);
+                var newIndex = NewView.VisibleItems.IndexOf(item);
 
                 switch (stage)
                 {
@@ -218,26 +144,26 @@ namespace LogList.Control
 
             for (var i = 0; i < bottom.Count; i++)
                 bottom[i] = new ItemTransition(bottom[i].Item)
-                    { From = bottom[i].From, To = _pagingRequest.Size + i, RemoveAfterMove = true };
+                    { From = bottom[i].From, To = NewView.Window.Size + i, RemoveAfterMove = true };
 
 
             var transitions = new[] { top, middle, bottom, @new }.SelectMany(x => x).ToList();
-            return transitions;
+            return (transitions, NewView.AnimateTransitions);
         }
 
-        private void ApplyTransitions(IList<ItemTransition> Transitions)
+        private void ApplyTransitions(IList<ItemTransition> Transitions, bool Animate)
         {
             foreach (var newItem in Transitions.Where(t => t.New))
                 CreateItem(newItem.Item, newItem.To);
 
             foreach (var itemTransition in Transitions)
                 if (itemTransition.Inserted)
-                    FadeInItem(itemTransition.Item);
+                    FadeInItem(itemTransition.Item, Animate);
                 else if (itemTransition.Deleted)
-                    FadeOutItem(itemTransition.Item);
+                    FadeOutItem(itemTransition.Item, Animate);
                 else
-                    MoveItem(itemTransition.Item, itemTransition.From, itemTransition.To,
-                             itemTransition.RemoveAfterMove);
+                    MoveItem(itemTransition.Item,            itemTransition.From, itemTransition.To,
+                             itemTransition.RemoveAfterMove, Animate);
 
             _visibleItems = Transitions.Where(t => !t.Deleted && !t.RemoveAfterMove)
                                        .OrderBy(t => t.To)
@@ -251,42 +177,39 @@ namespace LogList.Control
             {
                 var container = _containers[_visibleItems[i]];
                 container.SetValue(Canvas.TopProperty,
-                                   Heights.RelativeOffsetFromIndex(i));
+                                   Scroller.RelativeOffsetFromIndex(i));
             }
         }
 
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
         {
             base.OnRenderSizeChanged(sizeInfo);
-            if (sizeInfo.HeightChanged && _dataViewModel != null)
-                Heights.ViewportHeight = HostCanvas.ActualHeight;
+            if (sizeInfo.HeightChanged && Scroller != null)
+                Scroller.ViewportHeight = HostCanvas.ActualHeight;
         }
 
-        public void ScrollIntoView(ILogItem Item, double ScrollingMargin = 25)
-        {
-            VerifyAccess();
-
-            var scrollIndex =
-                _collection.BinarySearch(Item, BinarySearchExtensions.ItemNotFoundBehavior.ReturnClosestTimeIndex);
-
-            var itemOffset     = Heights.OffsetFromIndex(scrollIndex);
-            var listOffset     = Heights.ListOffset;
-            var viewportHeight = Heights.ViewportHeight;
-
-            if (itemOffset < listOffset + ScrollingMargin)
-                Heights.ListOffset = itemOffset                  - ScrollingMargin;
-            else if (itemOffset > listOffset                                    + viewportHeight - ScrollingMargin)
-                Heights.ListOffset = itemOffset - viewportHeight + ScrollingMargin;
-
-            _autoscroll = false;
-            _animate    = false;
-        }
+        // public void ScrollIntoView(ILogItem Item, double ScrollingMargin = 25)
+        // {
+        //     VerifyAccess();
+        //
+        //     var scrollIndex =
+        //         _collection.BinarySearch(Item, BinarySearchExtensions.ItemNotFoundBehavior.ReturnClosestTimeIndex);
+        //
+        //     var itemOffset     = Scroller.OffsetFromIndex(scrollIndex);
+        //     var listOffset     = Scroller.ListOffset;
+        //     var viewportHeight = Scroller.ViewportHeight;
+        //
+        //     if (itemOffset < listOffset + ScrollingMargin)
+        //         Scroller.ListOffset = itemOffset                  - ScrollingMargin;
+        //     else if (itemOffset > listOffset                      + viewportHeight - ScrollingMargin)
+        //         Scroller.ListOffset = itemOffset - viewportHeight + ScrollingMargin;
+        // }
 
         #region WPF Events
 
         private void OnMouseWheel(object Sender, MouseWheelEventArgs E)
         {
-            Heights.ListOffset -= E.Delta;
+            Scroller.ListOffset -= E.Delta;
         }
 
         #endregion
@@ -318,17 +241,17 @@ namespace LogList.Control
 
         #region Transitions
 
-        private void MoveItem(ILogItem Item, int From, int To, bool RemoveAfterMove)
+        private void MoveItem(ILogItem Item, int From, int To, bool RemoveAfterMove, bool Animate)
         {
             var container = _containers[Item];
-            container.SetValue(Canvas.TopProperty, Heights.RelativeOffsetFromIndex(To));
+            container.SetValue(Canvas.TopProperty, Scroller.RelativeOffsetFromIndex(To));
 
-            if (_animate)
+            if (Animate)
             {
                 var easingFunction = new PowerEase { EasingMode = EasingMode.EaseInOut };
                 var animation = new DoubleAnimation
                 {
-                    From           = Heights.RelativeOffsetFromIndex(From),
+                    From           = Scroller.RelativeOffsetFromIndex(From),
                     Duration       = TimeSpan.FromMilliseconds(300),
                     EasingFunction = easingFunction,
                     IsAdditive     = true
@@ -356,9 +279,9 @@ namespace LogList.Control
                 HostCanvas.Children.Remove(container);
         }
 
-        private void FadeInItem(ILogItem Item)
+        private void FadeInItem(ILogItem Item, bool Animate)
         {
-            if (!_animate) return;
+            if (!Animate) return;
 
             var container      = _containers[Item];
             var easingFunction = new PowerEase { EasingMode = EasingMode.EaseInOut };
@@ -376,12 +299,12 @@ namespace LogList.Control
             if (_containers.ContainsKey(Item))
                 return;
 
-            var yPosition = Heights.RelativeOffsetFromIndex(Index);
+            var yPosition = Scroller.RelativeOffsetFromIndex(Index);
 
             var presenter = new ContentPresenter
             {
                 Content             = Item,
-                Height              = Heights.ItemHeight,
+                Height              = Scroller.ItemHeight,
                 Width               = Width,
                 HorizontalAlignment = HorizontalAlignment.Stretch
             };
@@ -395,9 +318,9 @@ namespace LogList.Control
             HostCanvas.Children.Add(presenter);
         }
 
-        private void FadeOutItem(ILogItem Item)
+        private void FadeOutItem(ILogItem Item, bool Animate)
         {
-            if (!_animate)
+            if (Animate)
             {
                 RemoveItem(Item, true);
                 return;
@@ -425,9 +348,8 @@ namespace LogList.Control
         #region Properties
 
         public static readonly DependencyProperty ItemsSourceProperty = DependencyProperty.Register(
-            "ItemsSource", typeof(ReadOnlyObservableCollection<ILogItem>), typeof(LogListBox),
-            new PropertyMetadata(null,
-                                 ItemsSourceChangedCallback));
+            "ItemsSource", typeof(ILogViewSource), typeof(LogListBox),
+            new PropertyMetadata(null, ItemsSourceChangedCallback));
 
         private readonly Dictionary<ILogItem, ContentPresenter> _containers =
             new Dictionary<ILogItem, ContentPresenter>();
@@ -435,14 +357,14 @@ namespace LogList.Control
 
         private static void ItemsSourceChangedCallback(DependencyObject D, DependencyPropertyChangedEventArgs E)
         {
-            var data    = (ReadOnlyObservableCollection<ILogItem>) E.NewValue;
+            var data    = (ILogViewSource) E.NewValue;
             var control = (LogListBox) D;
             control.Attach(data);
         }
 
-        public ReadOnlyObservableCollection<ILogItem> ItemsSource
+        public ILogViewSource ItemsSource
         {
-            get => (ReadOnlyObservableCollection<ILogItem>) GetValue(ItemsSourceProperty);
+            get => (ILogViewSource) GetValue(ItemsSourceProperty);
             set => SetValue(ItemsSourceProperty, value);
         }
 
@@ -455,14 +377,16 @@ namespace LogList.Control
             set => SetValue(ItemTemplateProperty, value);
         }
 
-        public static readonly DependencyProperty HeightsProperty = DependencyProperty.Register(
-            "Heights", typeof(HeightViewModel), typeof(LogListBox),
-            new PropertyMetadata(new HeightViewModel(Observable.Return(0))));
+        public static readonly DependencyProperty ScrollerProperty = DependencyProperty.Register(
+            "Scroller", typeof(ScrollerViewModel), typeof(LogListBox),
+            new PropertyMetadata(new ScrollerViewModel(Observable.Return(0), Observable.Never<PresentationRequest>())));
 
-        public HeightViewModel Heights
+        private IDisposable _viewSourceSubscription;
+
+        public ScrollerViewModel Scroller
         {
-            get => (HeightViewModel) GetValue(HeightsProperty);
-            set => SetValue(HeightsProperty, value);
+            get => (ScrollerViewModel) GetValue(ScrollerProperty);
+            set => SetValue(ScrollerProperty, value);
         }
 
         #endregion
