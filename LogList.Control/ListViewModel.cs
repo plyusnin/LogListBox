@@ -7,9 +7,6 @@ namespace LogList.Control
     {
         public ListViewModel(IObservable<int> SourceSize)
         {
-            Heights = new HeightViewModel(SourceSize);
         }
-
-        public HeightViewModel Heights { get; }
     }
 }

@@ -55,13 +55,16 @@ namespace LogList.Control
             var collectionChanges = _collection.ToObservableChangeSet()
                                                .Synchronize(locker);
 
+
+            Heights = new HeightViewModel(collectionChanges.Count())
+            {
+                ViewportHeight = HostCanvas.ActualHeight
+            };
+            
             var viewModel = new ListViewModel(collectionChanges.Count());
+            _dataViewModel = viewModel;
 
-            _dataViewModel                        = viewModel;
-            Heights                               = viewModel.Heights;
-            _dataViewModel.Heights.ViewportHeight = HostCanvas.ActualHeight;
-
-            var pagingRequests = viewModel.Heights.PagingRequests;
+            var pagingRequests = Heights.PagingRequests;
 
             pagingRequests
                .Synchronize(locker)
@@ -82,11 +85,11 @@ namespace LogList.Control
                                   _autoscroll = true;
                               });
 
-            _dataViewModel.Heights.WhenAnyValue(x => x.ListOffset)
+            Heights.WhenAnyValue(x => x.ListOffset)
                           .Do(_ => _viewingPosition = GetViewingPosition())
                           .Subscribe();
 
-            _dataViewModel.Heights.WhenAnyValue(x => x.ListOffset)
+            Heights.WhenAnyValue(x => x.ListOffset)
                           .Subscribe(OnScroll);
         }
 
@@ -99,10 +102,10 @@ namespace LogList.Control
                                                  BinarySearchExtensions.ItemNotFoundBehavior.ReturnClosestTimeIndex);
             if (index < 0) return;
 
-            var itemAbsoluteOffset = _dataViewModel.Heights.OffsetFromIndex(index);
+            var itemAbsoluteOffset = Heights.OffsetFromIndex(index);
             var offset             = itemAbsoluteOffset - _viewingPosition.Offset;
 
-            _dataViewModel.Heights.ListOffset = offset;
+            Heights.ListOffset = offset;
         }
 
         private (ILogItem Item, double Offset) GetViewingPosition()
@@ -111,7 +114,7 @@ namespace LogList.Control
                 return (null, 0);
 
             var index = _visibleItems.Count / 2;
-            var res   = (_visibleItems[index], _dataViewModel.Heights.RelativeOffsetFromIndex(index));
+            var res   = (_visibleItems[index], Heights.RelativeOffsetFromIndex(index));
 
             return res;
         }
@@ -248,7 +251,7 @@ namespace LogList.Control
             {
                 var container = _containers[_visibleItems[i]];
                 container.SetValue(Canvas.TopProperty,
-                                   _dataViewModel.Heights.RelativeOffsetFromIndex(i));
+                                   Heights.RelativeOffsetFromIndex(i));
             }
         }
 
@@ -256,7 +259,7 @@ namespace LogList.Control
         {
             base.OnRenderSizeChanged(sizeInfo);
             if (sizeInfo.HeightChanged && _dataViewModel != null)
-                _dataViewModel.Heights.ViewportHeight = HostCanvas.ActualHeight;
+                Heights.ViewportHeight = HostCanvas.ActualHeight;
         }
 
         public void ScrollIntoView(ILogItem Item, double ScrollingMargin = 25)
@@ -266,14 +269,14 @@ namespace LogList.Control
             var scrollIndex =
                 _collection.BinarySearch(Item, BinarySearchExtensions.ItemNotFoundBehavior.ReturnClosestTimeIndex);
 
-            var itemOffset     = _dataViewModel.Heights.OffsetFromIndex(scrollIndex);
-            var listOffset     = _dataViewModel.Heights.ListOffset;
-            var viewportHeight = _dataViewModel.Heights.ViewportHeight;
+            var itemOffset     = Heights.OffsetFromIndex(scrollIndex);
+            var listOffset     = Heights.ListOffset;
+            var viewportHeight = Heights.ViewportHeight;
 
             if (itemOffset < listOffset + ScrollingMargin)
-                _dataViewModel.Heights.ListOffset = itemOffset                  - ScrollingMargin;
+                Heights.ListOffset = itemOffset                  - ScrollingMargin;
             else if (itemOffset > listOffset                                    + viewportHeight - ScrollingMargin)
-                _dataViewModel.Heights.ListOffset = itemOffset - viewportHeight + ScrollingMargin;
+                Heights.ListOffset = itemOffset - viewportHeight + ScrollingMargin;
 
             _autoscroll = false;
             _animate    = false;
@@ -283,7 +286,7 @@ namespace LogList.Control
 
         private void OnMouseWheel(object Sender, MouseWheelEventArgs E)
         {
-            _dataViewModel.Heights.ListOffset -= E.Delta;
+            Heights.ListOffset -= E.Delta;
         }
 
         #endregion
@@ -318,14 +321,14 @@ namespace LogList.Control
         private void MoveItem(ILogItem Item, int From, int To, bool RemoveAfterMove)
         {
             var container = _containers[Item];
-            container.SetValue(Canvas.TopProperty, _dataViewModel.Heights.RelativeOffsetFromIndex(To));
+            container.SetValue(Canvas.TopProperty, Heights.RelativeOffsetFromIndex(To));
 
             if (_animate)
             {
                 var easingFunction = new PowerEase { EasingMode = EasingMode.EaseInOut };
                 var animation = new DoubleAnimation
                 {
-                    From           = _dataViewModel.Heights.RelativeOffsetFromIndex(From),
+                    From           = Heights.RelativeOffsetFromIndex(From),
                     Duration       = TimeSpan.FromMilliseconds(300),
                     EasingFunction = easingFunction,
                     IsAdditive     = true
@@ -373,12 +376,12 @@ namespace LogList.Control
             if (_containers.ContainsKey(Item))
                 return;
 
-            var yPosition = _dataViewModel.Heights.RelativeOffsetFromIndex(Index);
+            var yPosition = Heights.RelativeOffsetFromIndex(Index);
 
             var presenter = new ContentPresenter
             {
                 Content             = Item,
-                Height              = _dataViewModel.Heights.ItemHeight,
+                Height              = Heights.ItemHeight,
                 Width               = Width,
                 HorizontalAlignment = HorizontalAlignment.Stretch
             };
