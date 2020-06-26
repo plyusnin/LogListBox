@@ -43,8 +43,7 @@ namespace LogList.Control
                                     .Do(_ => scroll = false)
                                     .Do(r => ListOffset = OffsetFromIndex(r.Window.Offset) + _shift)
                                     .Do(_ => scroll = true)
-                                    .Merge(innerRequests)
-                                    .DistinctUntilChanged(r => r.Window);
+                                    .Merge(innerRequests);
 
             this.WhenAnyValue(x => x.ListHeight,
                               x => x.ViewportHeight,

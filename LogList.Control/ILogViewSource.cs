@@ -19,6 +19,11 @@ namespace LogList.Control
             this.AnimateTransitions = AnimateTransitions;
         }
 
+        public override string ToString()
+        {
+            return $"Present {Window} (Animate = {AnimateTransitions})";
+        }
+
         public ViewWindow Window             { get; }
         public bool       AnimateTransitions { get; }
     }

@@ -43,10 +43,13 @@ namespace LogList.Control.Manipulation
                 ? (IAppendScrollingBehavior<TItem>) new ScrollToNewScrollingBehavior<TItem>()
                 : new PreservePositionScrollingBehavior<TItem>();
 
-            Data.Edit(list =>
-            {
-                foreach (var item in Items) list.Append(item);
-            }, scrollingBehavior, Animate);
+            Data.Edit(list => list.Append(Items), scrollingBehavior, Animate);
+        }
+
+        public static void Clear<TItem>(this IListDataViewModel<TItem> Data)
+            where TItem : ILogItem
+        {
+            Data.Edit(l => l.Clear(), new PreservePositionScrollingBehavior<TItem>(), false);
         }
     }
 }

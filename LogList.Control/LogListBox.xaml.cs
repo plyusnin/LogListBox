@@ -15,8 +15,6 @@ namespace LogList.Control
 {
     public partial class LogListBox : UserControl
     {
-        private (ILogItem Item, double Offset) _viewingPosition;
-
         private List<ILogItem> _visibleItems = new List<ILogItem>();
 
 
@@ -40,7 +38,6 @@ namespace LogList.Control
             };
 
             _viewSourceSubscription = Scroller.Requests
-                                              .DistinctUntilChanged(r => r.Window)
                                               .DistinctByDispatcher(DispatcherPriority.Loaded)
                                               .Synchronize(locker)
                                               .Select(r => new LogView(
@@ -186,6 +183,10 @@ namespace LogList.Control
             base.OnRenderSizeChanged(sizeInfo);
             if (sizeInfo.HeightChanged && Scroller != null)
                 Scroller.ViewportHeight = HostCanvas.ActualHeight;
+
+            if (sizeInfo.WidthChanged)
+                foreach (var container in _containers.Values)
+                    container.Width = ActualWidth;
         }
 
         // public void ScrollIntoView(ILogItem Item, double ScrollingMargin = 25)
@@ -305,9 +306,10 @@ namespace LogList.Control
             {
                 Content             = Item,
                 Height              = Scroller.ItemHeight,
-                Width               = Width,
+                Width               = ActualWidth,
                 HorizontalAlignment = HorizontalAlignment.Stretch
             };
+
             presenter.SetValue(Canvas.LeftProperty, 0.0);
             presenter.SetValue(Canvas.TopProperty,  yPosition);
 

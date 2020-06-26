@@ -11,52 +11,35 @@ namespace LogList.Control.Manipulation.Implementations
     public class ListViewModel<TItem> : ReactiveObject, IListDataViewModel<TItem>, ILogViewSource, IDisposable
         where TItem : ILogItem
     {
+        private readonly Subject<int> _filteredSetSize;
         private readonly object _locker = new object();
 
         private readonly List<TItem> _original = new List<TItem>();
 
         private readonly Subject<PresentationRequest> _presentationRequests;
-        private readonly Subject<int> _filteredSetSize;
-        
+
+        private readonly CompositeDisposable _cleanUp = new CompositeDisposable();
+
         private IFilter<TItem> _filter = Filters.Empty<TItem>();
         private List<TItem> _filtered = new List<TItem>();
         private ViewWindow _window = new ViewWindow(0, 16);
 
-        private CompositeDisposable _cleanUp = new CompositeDisposable();
-
-        public void Dispose()
-        {
-            _cleanUp.Dispose();
-        }
-
-        public IObservable<PresentationRequest> PresentationRequests => _presentationRequests;
-        public IObservable<int> FilteredSetSize { get; }
-
         public ListViewModel()
         {
             _presentationRequests = new Subject<PresentationRequest>().DisposeWith(_cleanUp);
-            _filteredSetSize = new Subject<int>().DisposeWith(_cleanUp);
-            
+            _filteredSetSize      = new Subject<int>().DisposeWith(_cleanUp);
+
             var filteredSetSize = _filteredSetSize.DistinctUntilChanged()
                                                   .Replay(1);
-            
+
             FilteredSetSize = filteredSetSize;
 
             filteredSetSize.Connect().DisposeWith(_cleanUp);
         }
-        
-        public IList<ILogItem> Present(ViewWindow Window)
-        {
-            lock (_locker)
-            {
-                var offset = Math.Min(Window.Offset, _filtered.Count);
-                var count = Math.Min(Window.Size, _filtered.Count - offset);                
-                _window = new ViewWindow(offset, count);
 
-                var range = _filtered.GetRange(_window.Offset, _window.Size);
-                
-                return range.OfType<ILogItem>().ToList();
-            }
+        public void Dispose()
+        {
+            _cleanUp.Dispose();
         }
 
         public void ApplyFilter(
@@ -88,10 +71,27 @@ namespace LogList.Control.Manipulation.Implementations
             {
                 var editor = new Editor(this, ScrollingBehavior);
                 EditAction(editor);
-                
+
                 _filteredSetSize.OnNext(_filtered.Count);
-                
+
                 if (editor.ViewChanged) RequestForRefresh(editor.WindowAfterEdit, AnimateTransition);
+            }
+        }
+
+        public IObservable<PresentationRequest> PresentationRequests => _presentationRequests;
+        public IObservable<int>                 FilteredSetSize      { get; }
+
+        public IList<ILogItem> Present(ViewWindow Window)
+        {
+            lock (_locker)
+            {
+                var offset = Math.Min(Window.Offset, _filtered.Count);
+                var count  = Math.Min(Window.Size,   _filtered.Count - offset);
+                _window = Window;
+
+                var range = _filtered.GetRange(offset, count);
+
+                return range.OfType<ILogItem>().ToList();
             }
         }
 
@@ -124,6 +124,25 @@ namespace LogList.Control.Manipulation.Implementations
                     var insertionIndex = _parent._filtered.Count;
                     var offset         = _scrollingBehavior.GetOffset(new[] { Item }, insertionIndex, WindowAfterEdit);
                     _parent._filtered.Add(Item);
+
+                    var invisibleChange = WindowAfterEdit.Offset == offset &&
+                                          insertionIndex         > WindowAfterEdit.Offset + WindowAfterEdit.Size;
+
+                    ViewChanged     |= !invisibleChange;
+                    WindowAfterEdit =  new ViewWindow(offset, WindowAfterEdit.Size);
+                }
+            }
+
+            public void Append(IList<TItem> Items)
+            {
+                _parent._original.AddRange(Items);
+                var filtered = Items.Where(_parent._filter.Check).ToList();
+                
+                if (filtered.Count > 0)
+                {
+                    var insertionIndex = _parent._filtered.Count;
+                    var offset         = _scrollingBehavior.GetOffset(filtered, insertionIndex, WindowAfterEdit);
+                    _parent._filtered.AddRange(filtered);
 
                     var invisibleChange = WindowAfterEdit.Offset == offset &&
                                           insertionIndex         > WindowAfterEdit.Offset + WindowAfterEdit.Size;
