@@ -31,6 +31,9 @@ namespace LogList.Control.Manipulation.Implementations.Filtering
 
         public bool IsSubFilterFor(IFilter<TItem> Another)
         {
+            if (Another == this)
+                return true;
+
             switch (Another)
             {
                 case EmptyFilter<TItem> emptyFilter:

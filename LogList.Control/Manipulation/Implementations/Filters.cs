@@ -16,6 +16,9 @@ namespace LogList.Control.Manipulation.Implementations
             string Request, StringComparison Comparison = StringComparison.CurrentCultureIgnoreCase)
             where TItem : ILogItem, IFilterableByString
         {
+            if (string.IsNullOrWhiteSpace(Request))
+                return Empty<TItem>();
+
             return new StringInterfaceFilter<TItem>(Request, Comparison);
         }
 
@@ -32,7 +35,16 @@ namespace LogList.Control.Manipulation.Implementations
             params Expression<Func<TItem, string>>[] PropertyProviders)
             where TItem : ILogItem
         {
+            if (string.IsNullOrWhiteSpace(Request))
+                return Empty<TItem>();
+
             return new StringExpressionFilter<TItem>(Request, Comparison, PropertyProviders);
+        }
+
+        public static IFilter<TItem> CompositeAll<TItem>(params IFilter<TItem>[] Children)
+            where TItem : ILogItem
+        {
+            return new CompositeAllFilter<TItem>(Children);
         }
     }
 }
