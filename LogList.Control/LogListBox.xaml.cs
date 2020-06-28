@@ -277,7 +277,10 @@ namespace LogList.Control
             var container = _containers[Item];
             _containers.Remove(Item);
             if (RemoveFromVisualTree)
-                HostCanvas.Children.Remove(container);
+            {
+                container.Visibility = Visibility.Collapsed;
+                _spareContainers.Push(container);
+            }
         }
 
         private void FadeInItem(ILogItem Item, bool Animate)
@@ -295,6 +298,8 @@ namespace LogList.Control
                                      });
         }
 
+        private readonly Stack<ContentPresenter> _spareContainers = new Stack<ContentPresenter>();
+
         private void CreateItem(ILogItem Item, int Index)
         {
             if (_containers.ContainsKey(Item))
@@ -302,14 +307,24 @@ namespace LogList.Control
 
             var yPosition = Scroller.RelativeOffsetFromIndex(Index);
 
-            var presenter = new ContentPresenter
+            var freshCreated = false;
+            if (!_spareContainers.TryPop(out var presenter))
             {
-                Content             = Item,
-                Height              = Scroller.ItemHeight,
-                Width               = ActualWidth,
-                HorizontalAlignment = HorizontalAlignment.Stretch
-            };
+                presenter = new ContentPresenter
+                {
+                    Height              = Scroller.ItemHeight,
+                    HorizontalAlignment = HorizontalAlignment.Stretch
+                };
+                freshCreated = true;
+            }
+            else
+            {
+                Console.WriteLine("from spare!");
+                presenter.Visibility = Visibility.Visible;
+            }
 
+            presenter.Content = Item;
+            presenter.Width   = ActualWidth;
             presenter.SetValue(Canvas.LeftProperty, 0.0);
             presenter.SetValue(Canvas.TopProperty,  yPosition);
 
@@ -317,7 +332,9 @@ namespace LogList.Control
                                  new Binding(nameof(ItemTemplate)) { Source = this });
 
             _containers.Add(Item, presenter);
-            HostCanvas.Children.Add(presenter);
+
+            if (freshCreated)
+                HostCanvas.Children.Add(presenter);
         }
 
         private void FadeOutItem(ILogItem Item, bool Animate)
