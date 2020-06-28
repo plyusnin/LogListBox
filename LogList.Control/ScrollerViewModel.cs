@@ -19,7 +19,7 @@ namespace LogList.Control
         private double _viewportHeight;
 
         public ScrollerViewModel(
-            IObservable<int> SourceSize, IObservable<PresentationRequest> OuterRequests, double ItemHeight = 25)
+            IObservable<int> SourceSize, IObservable<PresentationRequest> OuterRequests, double ItemHeight = 20)
         {
             this.ItemHeight = ItemHeight;
 

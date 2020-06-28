@@ -7,12 +7,14 @@
              d:DesignHeight="450" d:DesignWidth="800"
              x:Name="Root">
     <Border BorderBrush="{x:Static SystemColors.InactiveBorderBrush}" BorderThickness="1">
-        <Grid MouseWheel="OnMouseWheel" Background="Transparent">
+        <Grid PreviewMouseWheel="OnMouseWheel" Background="Transparent">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Canvas x:Name="HostCanvas" Grid.Column="0" ClipToBounds="True" />
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Auto">
+                <Canvas x:Name="HostCanvas" ClipToBounds="True" />
+            </ScrollViewer>
             <ScrollBar Grid.Column="1"
                        Maximum="{Binding ElementName=Root, Path=Scroller.ScrollableMaximum}"
                        Value="{Binding ElementName=Root, Path=Scroller.ListOffset}"

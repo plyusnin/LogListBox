@@ -185,8 +185,13 @@ namespace LogList.Control
                 Scroller.ViewportHeight = HostCanvas.ActualHeight;
 
             if (sizeInfo.WidthChanged)
+            {
+                if (_containers.Any())
+                    HostCanvas.MinWidth = _containers.Values.Max(c => c.ActualWidth);
+
                 foreach (var container in _containers.Values)
-                    container.Width = ActualWidth;
+                    container.MinWidth = ActualWidth;
+            }
         }
 
         // public void ScrollIntoView(ILogItem Item, double ScrollingMargin = 25)
@@ -210,6 +215,7 @@ namespace LogList.Control
 
         private void OnMouseWheel(object Sender, MouseWheelEventArgs E)
         {
+            E.Handled           =  false;
             Scroller.ListOffset -= E.Delta;
         }
 
@@ -319,12 +325,11 @@ namespace LogList.Control
             }
             else
             {
-                Console.WriteLine("from spare!");
                 presenter.Visibility = Visibility.Visible;
             }
 
-            presenter.Content = Item;
-            presenter.Width   = ActualWidth;
+            presenter.Content  = Item;
+            presenter.MinWidth = ActualWidth;
             presenter.SetValue(Canvas.LeftProperty, 0.0);
             presenter.SetValue(Canvas.TopProperty,  yPosition);
 
@@ -335,6 +340,8 @@ namespace LogList.Control
 
             if (freshCreated)
                 HostCanvas.Children.Add(presenter);
+
+            HostCanvas.MinWidth = _containers.Values.Max(c => c.ActualWidth);
         }
 
         private void FadeOutItem(ILogItem Item, bool Animate)
