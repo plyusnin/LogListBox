@@ -190,7 +190,7 @@ namespace LogList.Control
                     HostCanvas.MinWidth = _containers.Values.Max(c => c.ActualWidth);
 
                 foreach (var container in _containers.Values)
-                    container.MinWidth = ActualWidth;
+                    container.MinWidth = HostCanvas.ActualWidth;
             }
         }
 
@@ -329,7 +329,7 @@ namespace LogList.Control
             }
 
             presenter.Content  = Item;
-            presenter.MinWidth = ActualWidth;
+            presenter.MinWidth = HostCanvas.ActualWidth;
             presenter.SetValue(Canvas.LeftProperty, 0.0);
             presenter.SetValue(Canvas.TopProperty,  yPosition);
 
