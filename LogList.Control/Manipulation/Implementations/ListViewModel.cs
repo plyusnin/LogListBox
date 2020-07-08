@@ -11,14 +11,13 @@ namespace LogList.Control.Manipulation.Implementations
     public class ListViewModel<TItem> : ReactiveObject, IListDataViewModel<TItem>, ILogViewSource, IDisposable
         where TItem : ILogItem
     {
+        private readonly CompositeDisposable _cleanUp = new CompositeDisposable();
         private readonly Subject<int> _filteredSetSize;
         private readonly object _locker = new object();
 
         private readonly List<TItem> _original = new List<TItem>();
 
         private readonly Subject<PresentationRequest> _presentationRequests;
-
-        private readonly CompositeDisposable _cleanUp = new CompositeDisposable();
 
         private IFilter<TItem> _filter = Filters.Empty<TItem>();
         private List<TItem> _filtered = new List<TItem>();
@@ -137,7 +136,7 @@ namespace LogList.Control.Manipulation.Implementations
             {
                 _parent._original.AddRange(Items);
                 var filtered = Items.Where(_parent._filter.Check).ToList();
-                
+
                 if (filtered.Count > 0)
                 {
                     var insertionIndex = _parent._filtered.Count;
@@ -164,12 +163,12 @@ namespace LogList.Control.Manipulation.Implementations
             {
                 _parent._original.Clear();
                 _parent._filtered.Clear();
-                
+
                 _parent._original.TrimExcess();
                 _parent._filtered.TrimExcess();
-                
+
                 WindowAfterEdit = new ViewWindow(0, WindowAfterEdit.Size);
-                ViewChanged = true;
+                ViewChanged     = true;
             }
         }
     }

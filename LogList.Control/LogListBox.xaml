@@ -12,7 +12,8 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Auto">
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Auto"
+                          x:Name="HorizontalScroller">
                 <Canvas x:Name="HostCanvas" ClipToBounds="True" />
             </ScrollViewer>
             <ScrollBar Grid.Column="1"
