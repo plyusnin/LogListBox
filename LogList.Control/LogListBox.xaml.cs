@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reactive.Linq;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -15,8 +16,8 @@ namespace LogList.Control
 {
     public partial class LogListBox : UserControl
     {
+        private int _transitionSetId = -1;
         private List<ILogItem> _visibleItems = new List<ILogItem>();
-
 
         public LogListBox()
         {
@@ -45,7 +46,7 @@ namespace LogList.Control
                                                           ViewSource.Present(r.Window),
                                                           r.AnimateTransitions))
                                               .Select(ProcessListToTransitions)
-                                              .Do(x => ApplyTransitions(x.Transitions, x.Animate))
+                                              .Do(x => ApplyTransitions(x))
                                               .Subscribe();
 
             Scroller.WhenAnyValue(x => x.ListOffset)
@@ -53,7 +54,7 @@ namespace LogList.Control
                     .Subscribe(OnScroll);
         }
 
-        private (List<ItemTransition> Transitions, bool Animate) ProcessListToTransitions(ILogView NewView)
+        private TransitionsSet ProcessListToTransitions(ILogView NewView)
         {
             var top    = new List<ItemTransition>();
             var middle = new List<ItemTransition>();
@@ -145,27 +146,30 @@ namespace LogList.Control
 
 
             var transitions = new[] { top, middle, bottom, @new }.SelectMany(x => x).ToList();
-            return (transitions, NewView.AnimateTransitions);
+
+            return new TransitionsSet(Interlocked.Increment(ref _transitionSetId), transitions,
+                                      NewView.AnimateTransitions);
         }
 
-        private void ApplyTransitions(IList<ItemTransition> Transitions, bool Animate)
+        private void ApplyTransitions(TransitionsSet Set)
         {
-            foreach (var newItem in Transitions.Where(t => t.New))
+            foreach (var newItem in Set.Transitions.Where(t => t.New))
                 CreateItem(newItem.Item, newItem.To);
 
-            foreach (var itemTransition in Transitions)
+            foreach (var itemTransition in Set.Transitions)
                 if (itemTransition.Inserted)
-                    FadeInItem(itemTransition.Item, Animate);
+                    FadeInItem(itemTransition.Item, Set.Animate);
                 else if (itemTransition.Deleted)
-                    FadeOutItem(itemTransition.Item, Animate);
+                    FadeOutItem(itemTransition.Item, Set.Animate, Set.Id);
                 else
                     MoveItem(itemTransition.Item,            itemTransition.From, itemTransition.To,
-                             itemTransition.RemoveAfterMove, Animate);
+                             itemTransition.RemoveAfterMove, Set.Animate,         Set.Id);
 
-            _visibleItems = Transitions.Where(t => !t.Deleted && !t.RemoveAfterMove)
-                                       .OrderBy(t => t.To)
-                                       .Select(t => t.Item)
-                                       .ToList();
+            _visibleItems = Set.Transitions
+                               .Where(t => !t.Deleted && !t.RemoveAfterMove)
+                               .OrderBy(t => t.To)
+                               .Select(t => t.Item)
+                               .ToList();
         }
 
         private void OnScroll(double Offset)
@@ -221,6 +225,25 @@ namespace LogList.Control
 
         #endregion
 
+        private class TransitionsSet
+        {
+            public TransitionsSet(int Id, List<ItemTransition> Transitions, bool Animate)
+            {
+                this.Id          = Id;
+                this.Transitions = Transitions;
+                this.Animate     = Animate;
+            }
+
+            public int                  Id          { get; }
+            public List<ItemTransition> Transitions { get; }
+            public bool                 Animate     { get; }
+
+            public override string ToString()
+            {
+                return $"{Id}: {Transitions.Count} transitions, Animation: {Animate}";
+            }
+        }
+
         private struct ItemTransition
         {
             public ItemTransition(ILogItem Item) : this()
@@ -248,7 +271,7 @@ namespace LogList.Control
 
         #region Transitions
 
-        private void MoveItem(ILogItem Item, int From, int To, bool RemoveAfterMove, bool Animate)
+        private void MoveItem(ILogItem Item, int From, int To, bool RemoveAfterMove, bool Animate, int SetId)
         {
             var container = _containers[Item];
             container.SetValue(Canvas.TopProperty, Scroller.RelativeOffsetFromIndex(To));
@@ -265,7 +288,7 @@ namespace LogList.Control
                 };
                 if (RemoveAfterMove)
                 {
-                    RemoveItem(Item, false);
+                    RemoveItem(Item, false, SetId);
                     animation.Completed += (Sender, Args) => HostCanvas.Children.Remove(container);
                 }
 
@@ -274,11 +297,11 @@ namespace LogList.Control
             else
             {
                 if (RemoveAfterMove)
-                    RemoveItem(Item, true);
+                    RemoveItem(Item, true, SetId);
             }
         }
 
-        private void RemoveItem(ILogItem Item, bool RemoveFromVisualTree)
+        private void RemoveItem(ILogItem Item, bool RemoveFromVisualTree, int SetId)
         {
             var container = _containers[Item];
             _containers.Remove(Item);
@@ -344,11 +367,11 @@ namespace LogList.Control
             HostCanvas.MinWidth = _containers.Values.Max(c => c.ActualWidth);
         }
 
-        private void FadeOutItem(ILogItem Item, bool Animate)
+        private void FadeOutItem(ILogItem Item, bool Animate, int SetId)
         {
             if (Animate)
             {
-                RemoveItem(Item, true);
+                RemoveItem(Item, true, SetId);
                 return;
             }
 
@@ -363,7 +386,7 @@ namespace LogList.Control
                 EasingFunction = easingFunction
             };
 
-            RemoveItem(Item, false);
+            RemoveItem(Item, false, SetId);
             animation.Completed += (Sender, Args) => HostCanvas.Children.Remove(container);
 
             container.BeginAnimation(OpacityProperty, animation);
