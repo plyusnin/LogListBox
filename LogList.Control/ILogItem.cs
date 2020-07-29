@@ -1,9 +1,4 @@
-﻿using System;
-
-namespace LogList.Control
+﻿namespace LogList.Control
 {
-    public interface ILogItem
-    {
-        DateTime Time { get; }
-    }
+    public interface ILogItem { }
 }

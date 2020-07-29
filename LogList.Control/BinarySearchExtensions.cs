@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
+using LogList.Control.Manipulation.Implementations;
 
 namespace LogList.Control
 {
@@ -12,18 +12,18 @@ namespace LogList.Control
             ReturnClosestTimeIndex
         }
 
-        public static int BinarySearch<TItem>(
-            this IList<TItem> Collection, TItem Item,
+        public static int BinarySearch<TLogRecord>(
+            this IList<TLogRecord> Collection, TLogRecord Item,
             ItemNotFoundBehavior ItemNotFoundBehavior = ItemNotFoundBehavior.ReturnMinusOne)
-            where TItem : ILogItem
+            where TLogRecord : INumbered
         {
             return BinarySearch(Collection, Item, 0, Collection.Count - 1, ItemNotFoundBehavior);
         }
 
-        public static int BinarySearch<TItem>(
-            this IList<TItem> Collection, TItem Item, int StartIndex, int EndIndex,
+        public static int BinarySearch<TLogRecord>(
+            this IList<TLogRecord> Collection, TLogRecord Item, int StartIndex, int EndIndex,
             ItemNotFoundBehavior ItemNotFoundBehavior = ItemNotFoundBehavior.ReturnMinusOne)
-            where TItem : ILogItem
+            where TLogRecord : INumbered
         {
             if (Collection.Count == 0)
                 return -1;
@@ -31,22 +31,22 @@ namespace LogList.Control
             StartIndex = Math.Max(0, StartIndex);
             EndIndex   = Math.Min(EndIndex, Collection.Count - 1);
 
-            if (Item.Time < Collection[StartIndex].Time)
+            if (Item.Number < Collection[StartIndex].Number)
                 return -1;
-            if (Item.Time > Collection[EndIndex].Time)
+            if (Item.Number > Collection[EndIndex].Number)
                 return -1;
 
             while (EndIndex - StartIndex > 2)
             {
                 var middleIndex = (StartIndex + EndIndex) / 2;
-                if (Collection[middleIndex].Time > Item.Time)
+                if (Collection[middleIndex].Number > Item.Number)
                     EndIndex = middleIndex;
                 else
                     StartIndex = middleIndex;
             }
 
             int i;
-            for (i = StartIndex; Collection[i].Time <= Item.Time; i++)
+            for (i = StartIndex; Collection[i].Number <= Item.Number; i++)
                 if (Collection[i].Equals(Item))
                     return i;
 

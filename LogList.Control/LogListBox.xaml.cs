@@ -17,7 +17,7 @@ namespace LogList.Control
     public partial class LogListBox : UserControl
     {
         private int _transitionSetId = -1;
-        private List<ILogItem> _visibleItems = new List<ILogItem>();
+        private IList<LogRecord> _visibleItems = new List<LogRecord>();
 
         public LogListBox()
         {
@@ -75,20 +75,21 @@ namespace LogList.Control
             List<ItemTransition> @new;
             if (_visibleItems.Any())
             {
-                var oldMostTopTime = _visibleItems.First().Time;
-                var topNew         = allNew.Where(x => x.item.Time < oldMostTopTime).ToList();
+                var oldMostTopNumber = _visibleItems.First().Number;
+                var topNew           = allNew.Where(x => x.item.Number < oldMostTopNumber).ToList();
                 var topNewTransitions = topNew.Select((item, index) => new ItemTransition(item.item)
                                                           { To = item.index, From = index - topNew.Count, New = true });
 
-                var oldMotBottomTime = _visibleItems.Last().Time;
-                var bottomNew        = allNew.Where(x => x.item.Time > oldMotBottomTime).ToList();
+                var oldMotBottomNumber = _visibleItems.Last().Number;
+                var bottomNew          = allNew.Where(x => x.item.Number > oldMotBottomNumber).ToList();
                 var bottomNewTransitions = bottomNew.Select((item, index) => new ItemTransition(item.item)
                 {
                     To = item.index, From = NewView.Window.Size + index, New = true
                 });
 
                 var middleNewTransitions = allNew
-                                          .Where(x => x.item.Time >= oldMostTopTime && x.item.Time <= oldMotBottomTime)
+                                          .Where(x => x.item.Number >= oldMostTopNumber &&
+                                                      x.item.Number <= oldMotBottomNumber)
                                           .Select(x => new ItemTransition(x.item)
                                                       { To = x.index, New = true, Inserted = true });
 
@@ -127,7 +128,7 @@ namespace LogList.Control
                         }
                         else
                         {
-                            middle.AddRange(bottom.Select(it => new ItemTransition(it.Item)
+                            middle.AddRange(bottom.Select(it => new ItemTransition(it)
                                                               { From = it.From, Deleted = true }));
                             middle.Add(new ItemTransition(item) { From = i, To = newIndex });
                             bottom.Clear();
@@ -138,16 +139,17 @@ namespace LogList.Control
             }
 
             for (var i = 1; i <= top.Count; i++)
-                top[^i] = new ItemTransition(top[^i].Item) { From = top[^i].From, To = -i, RemoveAfterMove = true };
+                top[^i] = new ItemTransition(top[^i]) { From = top[^i].From, To = -i, RemoveAfterMove = true };
 
             for (var i = 0; i < bottom.Count; i++)
-                bottom[i] = new ItemTransition(bottom[i].Item)
+                bottom[i] = new ItemTransition(bottom[i])
                     { From = bottom[i].From, To = NewView.Window.Size + i, RemoveAfterMove = true };
 
 
             var transitions = new[] { top, middle, bottom, @new }.SelectMany(x => x).ToList();
 
             return new TransitionsSet(Interlocked.Increment(ref _transitionSetId), transitions,
+                                      NewView.VisibleItems,
                                       NewView.AnimateTransitions);
         }
 
@@ -165,18 +167,14 @@ namespace LogList.Control
                     MoveItem(itemTransition.Item,            itemTransition.From, itemTransition.To,
                              itemTransition.RemoveAfterMove, Set.Animate,         Set.Id);
 
-            _visibleItems = Set.Transitions
-                               .Where(t => !t.Deleted && !t.RemoveAfterMove)
-                               .OrderBy(t => t.To)
-                               .Select(t => t.Item)
-                               .ToList();
+            _visibleItems = Set.NewViewVisibleItems;
         }
 
         private void OnScroll(double Offset)
         {
             for (var i = 0; i < _visibleItems.Count; i++)
             {
-                var container = _containers[_visibleItems[i]];
+                var container = _containers[_visibleItems[i].Item];
                 container.SetValue(Canvas.TopProperty,
                                    Scroller.RelativeOffsetFromIndex(i));
             }
@@ -227,16 +225,19 @@ namespace LogList.Control
 
         private class TransitionsSet
         {
-            public TransitionsSet(int Id, List<ItemTransition> Transitions, bool Animate)
+            public TransitionsSet(
+                int Id, List<ItemTransition> Transitions, IList<LogRecord> NewViewVisibleItems, bool Animate)
             {
-                this.Id          = Id;
-                this.Transitions = Transitions;
-                this.Animate     = Animate;
+                this.Id                  = Id;
+                this.Transitions         = Transitions;
+                this.NewViewVisibleItems = NewViewVisibleItems;
+                this.Animate             = Animate;
             }
 
-            public int                  Id          { get; }
-            public List<ItemTransition> Transitions { get; }
-            public bool                 Animate     { get; }
+            public int                  Id                  { get; }
+            public List<ItemTransition> Transitions         { get; }
+            public IList<LogRecord>     NewViewVisibleItems { get; }
+            public bool                 Animate             { get; }
 
             public override string ToString()
             {
@@ -246,9 +247,14 @@ namespace LogList.Control
 
         private struct ItemTransition
         {
-            public ItemTransition(ILogItem Item) : this()
+            public ItemTransition(LogRecord Record) : this()
             {
-                this.Item = Item;
+                Item = Record.Item;
+            }
+
+            public ItemTransition(ItemTransition Transition) : this()
+            {
+                Item = Transition.Item;
             }
 
             public ILogItem Item            { get; }

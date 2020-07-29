@@ -7,7 +7,6 @@ namespace LogList.Control.Manipulation.Implementations
     public static class Filters
     {
         public static IFilter<TItem> Empty<TItem>()
-            where TItem : ILogItem
         {
             return new EmptyFilter<TItem>();
         }

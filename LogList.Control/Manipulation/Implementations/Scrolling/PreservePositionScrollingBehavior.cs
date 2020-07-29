@@ -7,16 +7,16 @@ namespace LogList.Control.Manipulation.Implementations.Scrolling
                                                             IFilterScrollingBehavior<TItem>
         where TItem : ILogItem
     {
-        public int GetOffset(IList<TItem> NewItems, int InsertionIndex, ViewWindow OldWindow)
+        public int GetOffset(IList<LogRecord<TItem>> NewItems, int InsertionIndex, ViewWindow OldWindow)
         {
             return OldWindow.Offset;
         }
 
-        public int GetOffset(List<TItem> OldFiltered, List<TItem> Filtered, ViewWindow Window)
+        public int GetOffset(List<LogRecord<TItem>> OldFiltered, List<LogRecord<TItem>> Filtered, ViewWindow Window)
         {
             if (OldFiltered.Count == 0 || Filtered.Count == 0)
                 return 0;
-            
+
             var indexInTheMiddle = Math.Min(Window.Offset + Window.Size / 2, OldFiltered.Count - 1);
             var itemInTheMiddle  = OldFiltered[indexInTheMiddle];
             var closestIndex = Filtered.BinarySearch(itemInTheMiddle,

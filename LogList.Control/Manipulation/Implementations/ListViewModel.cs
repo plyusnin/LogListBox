@@ -15,12 +15,12 @@ namespace LogList.Control.Manipulation.Implementations
         private readonly Subject<int> _filteredSetSize;
         private readonly object _locker = new object();
 
-        private readonly List<TItem> _original = new List<TItem>();
+        private readonly List<LogRecord<TItem>> _original = new List<LogRecord<TItem>>();
 
         private readonly Subject<PresentationRequest> _presentationRequests;
 
         private IFilter<TItem> _filter = Filters.Empty<TItem>();
-        private List<TItem> _filtered = new List<TItem>();
+        private List<LogRecord<TItem>> _filtered = new List<LogRecord<TItem>>();
         private ViewWindow _window = new ViewWindow(0, 16);
 
         public ListViewModel()
@@ -51,8 +51,8 @@ namespace LogList.Control.Manipulation.Implementations
                 _filter = newFilter;
 
                 var oldFiltered = _filtered;
-                _filtered = input.AsParallel()
-                                 .Where(Item => _filter.Check(Item))
+                _filtered = input.AsParallel().AsOrdered()
+                                 .Where(record => _filter.Check(record.Item))
                                  .ToList();
 
                 var offset = ScrollingBehavior.GetOffset(oldFiltered, _filtered, _window);
@@ -80,7 +80,7 @@ namespace LogList.Control.Manipulation.Implementations
         public IObservable<PresentationRequest> PresentationRequests => _presentationRequests;
         public IObservable<int>                 FilteredSetSize      { get; }
 
-        public IList<ILogItem> Present(ViewWindow Window)
+        public IList<LogRecord> Present(ViewWindow Window)
         {
             lock (_locker)
             {
@@ -90,7 +90,7 @@ namespace LogList.Control.Manipulation.Implementations
 
                 var range = _filtered.GetRange(offset, count);
 
-                return range.OfType<ILogItem>().ToList();
+                return range.Select(r => r.ForgetType()).ToList();
             }
         }
 
@@ -98,6 +98,8 @@ namespace LogList.Control.Manipulation.Implementations
         {
             _presentationRequests.OnNext(new PresentationRequest(Window, WithAnimation));
         }
+
+        private int LastRecordNumber() => _original.Count > 0 ? _original[^1].Number : -1;
 
         public class Editor : ILogEditor<TItem>
         {
@@ -117,12 +119,14 @@ namespace LogList.Control.Manipulation.Implementations
 
             public void Append(TItem Item)
             {
-                _parent._original.Add(Item);
+                var number = _parent.LastRecordNumber() + 1;
+                var record = new LogRecord<TItem>(number, Item);
+                _parent._original.Add(record);
                 if (_parent._filter.Check(Item))
                 {
                     var insertionIndex = _parent._filtered.Count;
-                    var offset         = _scrollingBehavior.GetOffset(new[] { Item }, insertionIndex, WindowAfterEdit);
-                    _parent._filtered.Add(Item);
+                    var offset         = _scrollingBehavior.GetOffset(new[] { record }, insertionIndex, WindowAfterEdit);
+                    _parent._filtered.Add(record);
 
                     var invisibleChange = WindowAfterEdit.Offset == offset &&
                                           insertionIndex         > WindowAfterEdit.Offset + WindowAfterEdit.Size;
@@ -134,8 +138,10 @@ namespace LogList.Control.Manipulation.Implementations
 
             public void Append(IList<TItem> Items)
             {
-                _parent._original.AddRange(Items);
-                var filtered = Items.Where(_parent._filter.Check).ToList();
+                var number  = _parent.LastRecordNumber() + 1;
+                var records = Items.Select((it, i) => new LogRecord<TItem>(number + i, it)).ToList();
+                _parent._original.AddRange(records);
+                var filtered = records.Where(r => _parent._filter.Check(r.Item)).ToList();
 
                 if (filtered.Count > 0)
                 {
