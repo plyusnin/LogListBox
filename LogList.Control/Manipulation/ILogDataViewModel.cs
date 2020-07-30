@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using LogList.Control.Manipulation.Implementations;
 using LogList.Control.Manipulation.Implementations.Scrolling;
 
 namespace LogList.Control.Manipulation
@@ -13,6 +15,8 @@ namespace LogList.Control.Manipulation
         void Edit(
             Action<ILogEditor<TItem>> EditAction, IAppendScrollingBehavior<TItem> ScrollingBehavior,
             bool AnimateTransition);
+
+        ObservableCollection<LogRecord<TItem>> SelectedItems { get; }
     }
 
     public static class ListDataViewModelExtensions

@@ -49,7 +49,7 @@ namespace LogList.Control.Manipulation.Implementations
             };
         }
 
-        private ObservableCollection<LogRecord<TItem>> SelectedItems { get; }
+        public ObservableCollection<LogRecord<TItem>> SelectedItems { get; }
 
         public void Dispose()
         {
