@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using DynamicData;
 using ReactiveUI;
 
 namespace LogList.Control.Manipulation.Implementations
@@ -18,6 +21,9 @@ namespace LogList.Control.Manipulation.Implementations
         private readonly List<LogRecord<TItem>> _original = new List<LogRecord<TItem>>();
 
         private readonly Subject<PresentationRequest> _presentationRequests;
+
+        private readonly Subject<ImmutableHashSet<ILogItem>> _selectionSubject =
+            new Subject<ImmutableHashSet<ILogItem>>();
 
         private IFilter<TItem> _filter = Filters.Empty<TItem>();
         private List<LogRecord<TItem>> _filtered = new List<LogRecord<TItem>>();
@@ -34,7 +40,16 @@ namespace LogList.Control.Manipulation.Implementations
             FilteredSetSize = filteredSetSize;
 
             filteredSetSize.Connect().DisposeWith(_cleanUp);
+
+            SelectedItems = new ObservableCollection<LogRecord<TItem>>();
+            SelectedItems.CollectionChanged += (Sender, Args) =>
+            {
+                var logItems = SelectedItems.Select(i => (ILogItem) i.Item).ToImmutableHashSet();
+                _selectionSubject.OnNext(logItems);
+            };
         }
+
+        private ObservableCollection<LogRecord<TItem>> SelectedItems { get; }
 
         public void Dispose()
         {
@@ -94,12 +109,60 @@ namespace LogList.Control.Manipulation.Implementations
             }
         }
 
+        public IObservable<ImmutableHashSet<ILogItem>> Selection => _selectionSubject;
+
+        public void ToggleSelection(LogRecord Record)
+        {
+            if (SelectedItems.Contains(Record.RecallType<TItem>()))
+                SelectedItems.Remove(Record.RecallType<TItem>());
+            else
+                SelectedItems.Add(Record.RecallType<TItem>());
+        }
+
+        public void Select(LogRecord Record)
+        {
+            SelectedItems.Clear();
+            SelectedItems.Add(Record.RecallType<TItem>());
+        }
+
+        public void ExtendSelection(LogRecord ToRecord)
+        {
+            if (SelectedItems.Count == 0)
+                return;
+
+            var record = ToRecord.RecallType<TItem>();
+
+            var selectedMinimum = SelectedItems.First();
+            var selectedMaximum = SelectedItems.Last();
+            foreach (var item in SelectedItems)
+            {
+                if (item.Number < selectedMinimum.Number) selectedMinimum = item;
+                if (item.Number > selectedMinimum.Number) selectedMaximum = item;
+            }
+
+            if (ToRecord.Number < selectedMinimum.Number)
+            {
+                var from = _filtered.BinarySearch(
+                    record, BinarySearchExtensions.ItemNotFoundBehavior.ReturnClosestTimeIndex);
+                SelectedItems.AddRange(_filtered.Skip(from).TakeWhile(r => r.Number < selectedMinimum.Number));
+            }
+            else if (ToRecord.Number > selectedMinimum.Number)
+            {
+                var from = _filtered.BinarySearch(selectedMaximum,
+                                                  BinarySearchExtensions.ItemNotFoundBehavior.ReturnClosestTimeIndex);
+                SelectedItems.AddRange(_filtered.Skip(from).TakeWhile(r => r.Number <= ToRecord.Number));
+            }
+        }
+
         private void RequestForRefresh(ViewWindow Window, bool WithAnimation)
         {
             _presentationRequests.OnNext(new PresentationRequest(Window, WithAnimation));
         }
 
-        private int LastRecordNumber() => _original.Count > 0 ? _original[^1].Number : -1;
+        private int LastRecordNumber()
+        {
+            return _original.Count > 0 ? _original[^1].Number : -1;
+        }
 
         public class Editor : ILogEditor<TItem>
         {
@@ -125,7 +188,7 @@ namespace LogList.Control.Manipulation.Implementations
                 if (_parent._filter.Check(Item))
                 {
                     var insertionIndex = _parent._filtered.Count;
-                    var offset         = _scrollingBehavior.GetOffset(new[] { record }, insertionIndex, WindowAfterEdit);
+                    var offset = _scrollingBehavior.GetOffset(new[] { record }, insertionIndex, WindowAfterEdit);
                     _parent._filtered.Add(record);
 
                     var invisibleChange = WindowAfterEdit.Offset == offset &&

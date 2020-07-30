@@ -39,6 +39,12 @@
         public int      Number { get; }
         public ILogItem Item   { get; }
 
+        public LogRecord<TItem> RecallType<TItem>()
+            where TItem : ILogItem
+        {
+            return new LogRecord<TItem>(Number, (TItem) Item);
+        }
+
         public override string ToString()
         {
             return $"{Number}: {Item}";

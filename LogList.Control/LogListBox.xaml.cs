@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
+using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Threading;
 using System.Windows;
@@ -28,6 +30,8 @@ namespace LogList.Control
         {
             _viewSourceSubscription?.Dispose();
 
+            _viewSource = ViewSource;
+
             if (ViewSource == null)
                 return;
 
@@ -38,20 +42,40 @@ namespace LogList.Control
                 ViewportHeight = HostCanvas.ActualHeight
             };
 
-            _viewSourceSubscription = Scroller.Requests
-                                              .DistinctByDispatcher(DispatcherPriority.Loaded)
-                                              .Synchronize(locker)
-                                              .Select(r => new LogView(
-                                                          r.Window,
-                                                          ViewSource.Present(r.Window),
-                                                          r.AnimateTransitions))
-                                              .Select(ProcessListToTransitions)
-                                              .Do(x => ApplyTransitions(x))
-                                              .Subscribe();
+            _viewSourceSubscription = new CompositeDisposable();
+            
+            Scroller.Requests
+                    .DistinctByDispatcher(DispatcherPriority.Loaded)
+                    .Synchronize(locker)
+                    .Select(r => new LogView(
+                                r.Window,
+                                ViewSource.Present(r.Window),
+                                r.AnimateTransitions))
+                    .Select(ProcessListToTransitions)
+                    .Do(x => ApplyTransitions(x))
+                    .Subscribe()
+                    .DisposeWith(_viewSourceSubscription);
 
             Scroller.WhenAnyValue(x => x.ListOffset)
                     .Synchronize(locker)
-                    .Subscribe(OnScroll);
+                    .Subscribe(OnScroll)
+                    .DisposeWith(_viewSourceSubscription);
+
+            ViewSource.Selection
+                      .ObserveOnDispatcher()
+                      .Synchronize(locker)
+                      .Subscribe(selection => ProcessSelection(selection))
+                      .DisposeWith(_viewSourceSubscription);
+        }
+
+        private void ProcessSelection(ImmutableHashSet<ILogItem> Selection)
+        {
+            foreach (var item in _containers)
+            {
+                item.Value.IsSelected = Selection.Contains(item.Key);
+            }
+
+            _selection = Selection;
         }
 
         private TransitionsSet ProcessListToTransitions(ILogView NewView)
@@ -333,7 +357,7 @@ namespace LogList.Control
                                      });
         }
 
-        private readonly Stack<ContentPresenter> _spareContainers = new Stack<ContentPresenter>();
+        private readonly Stack<ListViewItem> _spareContainers = new Stack<ListViewItem>();
 
         private void CreateItem(ILogItem Item, int Index)
         {
@@ -345,11 +369,12 @@ namespace LogList.Control
             var freshCreated = false;
             if (!_spareContainers.TryPop(out var presenter))
             {
-                presenter = new ContentPresenter
+                presenter = new ListViewItem
                 {
                     Height              = Scroller.ItemHeight,
                     HorizontalAlignment = HorizontalAlignment.Stretch
                 };
+                presenter.PreviewMouseLeftButtonDown += PresenterOnMouseLeftButtonDown; 
                 freshCreated = true;
             }
             else
@@ -359,6 +384,7 @@ namespace LogList.Control
 
             presenter.Content  = Item;
             presenter.MinWidth = HostCanvas.ActualWidth;
+            presenter.IsSelected = _selection.Contains(Item); 
             presenter.SetValue(Canvas.LeftProperty, 0.0);
             presenter.SetValue(Canvas.TopProperty,  yPosition);
 
@@ -371,6 +397,18 @@ namespace LogList.Control
                 HostCanvas.Children.Add(presenter);
 
             HostCanvas.MinWidth = _containers.Values.Max(c => c.ActualWidth);
+        }
+
+        private void PresenterOnMouseLeftButtonDown(object Sender, MouseButtonEventArgs E)
+        {
+            var item = (ILogItem) ((ListViewItem) Sender).Content;
+            var record = _visibleItems.First(r => r.Item == item);
+            if (Keyboard.Modifiers == ModifierKeys.Control)
+                _viewSource.ToggleSelection(record);
+            if (Keyboard.Modifiers == ModifierKeys.Shift)
+                _viewSource.ExtendSelection(record);
+            else
+                _viewSource.Select(record);
         }
 
         private void FadeOutItem(ILogItem Item, bool Animate, int SetId)
@@ -406,8 +444,8 @@ namespace LogList.Control
             "ItemsSource", typeof(ILogViewSource), typeof(LogListBox),
             new PropertyMetadata(null, ItemsSourceChangedCallback));
 
-        private readonly Dictionary<ILogItem, ContentPresenter> _containers =
-            new Dictionary<ILogItem, ContentPresenter>();
+        private readonly Dictionary<ILogItem, ListViewItem> _containers =
+            new Dictionary<ILogItem, ListViewItem>();
 
 
         private static void ItemsSourceChangedCallback(DependencyObject D, DependencyPropertyChangedEventArgs E)
@@ -436,7 +474,9 @@ namespace LogList.Control
             "Scroller", typeof(ScrollerViewModel), typeof(LogListBox),
             new PropertyMetadata(new ScrollerViewModel(Observable.Return(0), Observable.Never<PresentationRequest>())));
 
-        private IDisposable _viewSourceSubscription;
+        private CompositeDisposable _viewSourceSubscription;
+        private ImmutableHashSet<ILogItem> _selection = ImmutableHashSet<ILogItem>.Empty;
+        private ILogViewSource _viewSource;
 
         public ScrollerViewModel Scroller
         {
