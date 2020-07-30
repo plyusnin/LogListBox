@@ -43,7 +43,7 @@ namespace LogList.Control
             };
 
             _viewSourceSubscription = new CompositeDisposable();
-            
+
             Scroller.Requests
                     .DistinctByDispatcher(DispatcherPriority.Loaded)
                     .Synchronize(locker)
@@ -70,10 +70,7 @@ namespace LogList.Control
 
         private void ProcessSelection(ImmutableHashSet<ILogItem> Selection)
         {
-            foreach (var item in _containers)
-            {
-                item.Value.IsSelected = Selection.Contains(item.Key);
-            }
+            foreach (var item in _containers) item.Value.IsSelected = Selection.Contains(item.Key);
 
             _selection = Selection;
         }
@@ -371,20 +368,24 @@ namespace LogList.Control
             {
                 presenter = new ListViewItem
                 {
-                    Height              = Scroller.ItemHeight,
-                    HorizontalAlignment = HorizontalAlignment.Stretch
+                    Style                      = ItemContainerStyle,
+                    Height                     = Scroller.ItemHeight,
+                    HorizontalAlignment        = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                    VerticalContentAlignment   = VerticalAlignment.Stretch,
+                    Padding                    = new Thickness(0)
                 };
-                presenter.PreviewMouseLeftButtonDown += PresenterOnMouseLeftButtonDown; 
-                freshCreated = true;
+                presenter.PreviewMouseLeftButtonDown += PresenterOnMouseLeftButtonDown;
+                freshCreated                         =  true;
             }
             else
             {
                 presenter.Visibility = Visibility.Visible;
             }
 
-            presenter.Content  = Item;
-            presenter.MinWidth = HostCanvas.ActualWidth;
-            presenter.IsSelected = _selection.Contains(Item); 
+            presenter.Content    = Item;
+            presenter.MinWidth   = HostCanvas.ActualWidth;
+            presenter.IsSelected = _selection.Contains(Item);
             presenter.SetValue(Canvas.LeftProperty, 0.0);
             presenter.SetValue(Canvas.TopProperty,  yPosition);
 
@@ -401,7 +402,7 @@ namespace LogList.Control
 
         private void PresenterOnMouseLeftButtonDown(object Sender, MouseButtonEventArgs E)
         {
-            var item = (ILogItem) ((ListViewItem) Sender).Content;
+            var item   = (ILogItem) ((ListViewItem) Sender).Content;
             var record = _visibleItems.First(r => r.Item == item);
             if (Keyboard.Modifiers == ModifierKeys.Control)
                 _viewSource.ToggleSelection(record);
@@ -439,6 +440,8 @@ namespace LogList.Control
         #endregion
 
         #region Properties
+
+        public Style ItemContainerStyle { get; set; }
 
         public static readonly DependencyProperty ItemsSourceProperty = DependencyProperty.Register(
             "ItemsSource", typeof(ILogViewSource), typeof(LogListBox),
