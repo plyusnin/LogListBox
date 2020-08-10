@@ -8,7 +8,7 @@ namespace LogList.Control.Manipulation.Implementations.Scrolling
     {
         public int GetOffset(IList<LogRecord<TItem>> NewItems, int InsertionIndex, ViewWindow OldWindow)
         {
-            return Math.Max(0, InsertionIndex + NewItems.Count - OldWindow.Size);
+            return Math.Max(0, InsertionIndex + NewItems.Count - (OldWindow.Size - 1));
         }
     }
 }
